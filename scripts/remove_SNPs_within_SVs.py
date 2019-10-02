@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 
 '''
-version 1.0
+version 1.1
 
 created by Rafael Della Coletta
 2019-09-26
@@ -14,93 +14,74 @@ import argparse as ap
 # initialize argument parser (pass user input from command line to script)
 parser = ap.ArgumentParser(formatter_class=ap.RawDescriptionHelpFormatter,
                            description='''
-description: this script removes SNPs from a VCF file that fall within the
-             boundaries of a structural variant in another VCF file.
-
-note: VCF header from original and filtered files are the same.''')
+description: this script removes SNPs from a hapmap file that fall within the
+             boundaries of a structural variant in another hapmap file.''')
 # add positional arguments
-parser.add_argument("vcf_SNPs", type=str,
-                    help="VCF file with SNPs calls")
-parser.add_argument("vcf_SVs", type=str,
-                    help="VCF file with structural variant calls")
+parser.add_argument("hmp_SNPs", type=str,
+                    help="hapmap file with SNPs calls")
+parser.add_argument("hmp_SVs", type=str,
+                    help="hapmap file with structural variant calls")
 parser.add_argument("output_name", type=str,
                     help="name of output file")
 # optional argument for which type of variants to exclude?
 
 # pass arguments into variables
 args = parser.parse_args()
-vcf_SNPs = args.vcf_SNPs
-vcf_SVs = args.vcf_SVs
+hmp_SNPs = args.hmp_SNPs
+hmp_SVs = args.hmp_SVs
 output_name = args.output_name
 
 
 # funtion to extract positions of SNPs or SVs
-def get_variant_info(vcf_file, is_SV=False):
+def get_variant_info(hmp_file, is_SV=False):
 
-    # define which information to extract from VCF header
-    info_list = ["CHROM", "POS", "INFO"]
-    # create list to store indices of each info above
-    header_idx = []
     # create dictionary to store information extracted
     variant_info = {}
-
-    # read vcf line by line
-    for line in vcf_file:
+    # skip hapmap header
+    hmp_file.readline()
+    # read hapmap line by line
+    for line in hmp_file:
         line = line.strip()
-        # if line starts with ## -- skip
-        if line[0:2] == "##":
-            continue
-        # if line starts with # -- save as header
-        elif line[0:1] == "#":
-            # save header
-            header = line.split("\t")
-            # remove # from #CHROM
-            header[0] = header[0][1:]
-            # get indices of columns with important information from header
-            for info in info_list:
-                header_idx.append(header.index(info))
-            # print(header_idx)
-        # otherwise, extract info from line
-        else:
-            line = line.split("\t")
-            # get chrom number
-            chr = line[header_idx[0]]
+        line = line.split("\t")
+        # get chrom number
+        chr = line[2]
+        # if hapmap file is from SNPs...
+        if is_SV is False:
             # get snp position
-            pos = line[header_idx[1]]
-
-            # if vcf file is from SNPs...
-            if is_SV is False:
-                # add coordinates to dictionary
-                if chr not in variant_info:
-                    variant_info[chr] = [pos]
-                else:
-                    variant_info[chr].append(pos)
-
-            # if vcf file is from SVs...
-            if is_SV is True:
-                # get sv type
-                sv_type = line[header_idx[2]].split(";SVTYPE=")
-                sv_type = sv_type[1].split(";")[0]
-                # exclude translocations
-                if sv_type != "TRA":
-                    # get end position of sv
-                    sv_end = line[header_idx[2]].split(";END=")
-                    sv_end = sv_end[1].split(";")[0]
-                    # add sv info to dictionary
-                    sv_info = pos + "," + sv_end + "," + sv_type
-                    if chr not in variant_info:
-                        variant_info[chr] = [sv_info]
-                    else:
-                        variant_info[chr].append(sv_info)
+            pos = line[3]
+            # add coordinates to dictionary
+            if chr not in variant_info:
+                variant_info[chr] = [pos]
+            else:
+                variant_info[chr].append(pos)
+        # if hapmap file is from SVs...
+        if is_SV is True:
+            # get sv type
+            sv_type = line[0].split(".")[0]
+            # get sv location
+            if sv_type == "tra":
+                # get position on reference genome for TRA
+                # NOTE: still need to get END position with Arun...
+                sv_start = line[3]
+                sv_end = str(int(sv_start) + 1)
+            else:
+                sv_start = line[0].split(".")[2]
+                sv_end = line[0].split(".")[3]
+            # add sv info to dictionary
+            sv_info = sv_start + "," + sv_end + "," + sv_type
+            if chr not in variant_info:
+                variant_info[chr] = [sv_info]
+            else:
+                variant_info[chr].append(sv_info)
 
     return variant_info
 
 
 # open input files
-infile_SNPs = open(vcf_SNPs, "r")
-infile_SVs = open(vcf_SVs, "r")
+infile_SNPs = open(hmp_SNPs, "r")
+infile_SVs = open(hmp_SVs, "r")
 
-# parse vcf file to get coordinates of variants
+# parse hapmap file to get coordinates of variants
 print("Extracting SNPs and SVs coordinates...")
 
 SNPs_info = get_variant_info(infile_SNPs, is_SV=False)
@@ -126,58 +107,35 @@ print("\nIdentifying SNPs within a SV...")
 
 # for each SV in each chromosome
 for chr in SVs_info.keys():
-    for SV in SVs_info[chr]:
-        # get SV range
-        sv_start = int(SV.split(",")[0])
-        sv_end = int(SV.split(",")[1])
-        sv_range = list(range(sv_start, sv_end + 1, 1))
-        # add all bases of the SV range into the dictionary
-        if chr not in SVs_range:
-            SVs_range[chr] = [sv_range]
+    # make sure chromosome is also in SNPs dictionary
+    if chr in SNPs_info.keys():
+        for SV in SVs_info[chr]:
+            # get SV range
+            sv_start = int(SV.split(",")[0])
+            sv_end = int(SV.split(",")[1])
+            sv_range = list(range(sv_start, sv_end + 1, 1))
+            # add all bases of the SV range into the dictionary
+            if chr not in SVs_range:
+                SVs_range[chr] = [sv_range]
+            else:
+                # SVs_range[chr] will be a list with many sublists inside
+                SVs_range[chr].append(sv_range)
+        # transform all sublists into one flat list
+        SVs_range[chr] = [base for range in SVs_range[chr] for base in range]
+        # remove redundancy
+        SVs_range[chr] = set(SVs_range[chr])
+        # keep only SNPs that are within the range
+        if chr not in SNPs_within_SVs:
+            SNPs_within_SVs[chr] = [SNP for SNP in SNPs_info[chr] if int(SNP) in SVs_range[chr]]
         else:
-            # SVs_range[chr] will be a list with many sublists inside
-            SVs_range[chr].append(sv_range)
-    # transform all sublists into one flat list
-    SVs_range[chr] = [base for range in SVs_range[chr] for base in range]
-    # remove redundancy
-    SVs_range[chr] = set(SVs_range[chr])
-    # keep only SNPs that are within the range
-    if chr not in SNPs_within_SVs:
-        SNPs_within_SVs[chr] = [SNP for SNP in SNPs_info[chr] if int(SNP) in SVs_range[chr]]
-    else:
-        [SNPs_within_SVs[chr].append(SNP) for SNP in SNPs_info[chr] if int(SNP) in SVs_range[chr]]
-    # erase all values for that dictionary key to save memory
-    SVs_range[chr] = 0
-    print("  ", len(SNPs_within_SVs[chr]), "SNPs within a SV in", chr + "!")
-
-
-# open SNP vcf file again
-infile_SNPs = open(vcf_SNPs, "r")
-
-# also open output file to write the filtered vcf
-outfile = open(output_name, "w")
-
-print("\nGenerating new VCF file only with SNPs not within a SV range...")
-
-# read vcf line by line
-for line in infile_SNPs:
-    line = line.strip()
-    # if line starts with ## -- print line to new vcf
-    if line[0:1] == "#":
-        print(line, file=outfile)
-    # otherwise, extract info from line
-    else:
-        # get chrom number and snp position
-        chr = line.split("\t")[0]
-        pos = line.split("\t")[1]
-        # make sure the chromosome being parsed has SNPs within a SV
-        if chr in SNPs_within_SVs.keys():
-            # only print lines to new vcf if positions are not within a SV
-            if pos not in SNPs_within_SVs[chr]:
-                print(line, file=outfile)
+            [SNPs_within_SVs[chr].append(SNP) for SNP in SNPs_info[chr] if int(SNP) in SVs_range[chr]]
+        # erase all values for that dictionary key to save memory
+        SVs_range[chr] = 0
+        print("  ", len(SNPs_within_SVs[chr]), "SNPs within a SV in chr",
+              chr + "!")
+        # open output file to write table with SNPs inside SVs
+        with open(output_name + "_" + chr + ".txt", "w") as outfile:
+            for pos in SNPs_within_SVs[chr]:
+                print(chr, pos, sep="\t", file=outfile)
 
 print("Done!")
-
-# close files
-infile_SNPs.close()
-outfile.close()
