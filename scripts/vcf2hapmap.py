@@ -7,7 +7,6 @@ created by Rafael Della Coletta
 
 
 import argparse as ap
-import pandas as pd
 
 
 # initialize argument parser (pass user input from command line to script)
@@ -123,17 +122,3 @@ for line in infile:
 # close files
 infile.close()
 outfile.close()
-
-
-# since i was using the middle point of the SV as the its position in the
-# hapmap file, it's possible that the position of the SVs are not ordered
-# correctly (i.e., ascending order). Thus, i need to open previous output
-# and sort SVs by chromosome and position
-
-# open file as data frame
-hapmap = pd.read_table(output_name, sep="\t", keep_default_na=False,
-                       dtype="unicode")
-# sort by chromosome and then by position
-hapmap_sorted = hapmap.sort_values(["chrom", "pos"])
-# write sorted hapmap
-hapmap_sorted.to_csv(output_name, sep="\t", index=False)
