@@ -9,6 +9,8 @@ created by Rafael Della Coletta
 
 
 import argparse as ap
+import pandas as pd
+from natsort import natsorted
 
 
 # initialize argument parser (pass user input from command line to script)
@@ -23,6 +25,8 @@ parser.add_argument("hmp_SVs", type=str,
                     help="hapmap file with structural variant calls")
 parser.add_argument("output_name", type=str,
                     help="name of output file")
+parser.add_argument("--SVs_pos", action="store_true",
+                    help="output BED file with SVs positions")
 # optional argument for which type of variants to exclude?
 
 # pass arguments into variables
@@ -86,6 +90,29 @@ print("Extracting SNPs and SVs coordinates...")
 
 SNPs_info = get_variant_info(infile_SNPs, is_SV=False)
 SVs_info = get_variant_info(infile_SVs, is_SV=True)
+
+if args.SVs_pos:
+    with open(output_name + ".bed", "w") as bedfile:
+        # print header
+        print("chrom", "chromStart", "chromEnd", sep="\t", file=bedfile)
+        for chr in SVs_info.keys():
+            for coord in SVs_info[chr]:
+                sv_start = coord.split(",")[0]
+                sv_end = coord.split(",")[1]
+                print(chr, sv_start, sv_end, sep="\t", file=bedfile)
+    # sort bed file by chrom and position
+    bed_table = pd.read_table(output_name + ".bed", sep="\t",
+                              keep_default_na=False, dtype="unicode")
+    # make sure columns are the correct type
+    bed_table.chrom = bed_table.chrom.astype('category')
+    bed_table.chrom.cat.reorder_categories(natsorted(set(bed_table.chrom)),
+                                           inplace=True, ordered=True)
+    bed_table.chromStart = bed_table.chromStart.astype('int32')
+    # sort by chromosome and then by start position
+    bed_sorted = bed_table.sort_values(["chrom", "chromStart"])
+    # write sorted hapmap
+    bed_sorted.to_csv(output_name + ".bed", sep="\t", index=False)
+
 print("Done!")
 
 # close files
