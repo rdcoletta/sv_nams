@@ -1,6 +1,6 @@
 # Projecting SVs to NAM lines
 
-by Rafael Della Coletta and Candice Hirsch (September-November, 2019)
+by Rafael Della Coletta and Candice Hirsch (September-December, 2019)
 
 > The goal of this analysis is to project structural variants (SVs) indentified for the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines.
 
@@ -22,7 +22,7 @@ mkdir -p sv_nams/{analysis,data,scripts}
 
 ## Transfering data from CyVerse to local folder
 
-On September 26th, Dr. Arun Seetharam shared the data needed for SV projection via CyVerse. The CyVerse path to the data is `/iplant/home/shared/NAM/PANDA/SVs-impute`. The following commands were used to transfer this data to my folder at MSI so I can do my analyses.
+On November 27th, Dr. Arun Seetharam shared the data needed for SV projection via CyVerse. The CyVerse path to the data is `/iplant/home/shared/NAM/PANDA/SVs-impute`. The following commands were used to transfer this data to my folder at MSI so I can do my analyses.
 
 
 ```bash
@@ -36,19 +36,19 @@ icd /iplant/home/shared/NAM/PANDA/SVs-impute
 # check if files match what Arun described
 ils
 # download data
-iget -K NAM_sv_sniffles_v1.vcf.gz
+iget -K NAM-structural-variations-v2.0.vcf.gz
 iget -K GBS-output.tar.gz
 iget -K B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf.gz
 
 # decompress files
-gunzip NAM_sv_sniffles_v1.vcf.gz
+gunzip NAM-structural-variations-v2.0.vcf.gz
 tar xvzf GBS-output.tar.gz
 gunzip B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf.gz
 ```
 
 After downloading and decompressing the files, these are the data that I will be using:
 
-* `NAM_sv_sniffles_v1.vcf`: file with SV calls for NAM founders.
+* `NAM-structural-variations-v2.0.vcf`: file with SV calls for NAM founders.
 * `B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf`: file with SNP calls for NAM founders.
 * `GBS-output/populations.snps.vcf`: file with SNP calls (GBS) for all NAM lines.
 
@@ -132,15 +132,12 @@ cd ~/projects/sv_nams
 python scripts/vcf2hapmap.py -h
 
 # convert SVs vcf to hmp
-python scripts/vcf2hapmap.py data/NAM_sv_sniffles_v1.vcf data/NAM_founders_SVs.not-sorted.hmp.txt
+python scripts/vcf2hapmap.py data/NAM-structural-variations-v2.0.vcf data/NAM_founders_SVs.not-sorted.hmp.txt
 
 # sort hmp file
 run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile data/NAM_founders_SVs.not-sorted.hmp.txt -outputFile data/NAM_founders_SVs.sorted.hmp.txt -fileType Hapmap
 # convert to diploid format
 run_pipeline.pl -Xmx10g -importGuess data/NAM_founders_SVs.sorted.hmp.txt -export data/NAM_founders_SVs.hmp.txt -exportType HapmapDiploid
-
-# correct typo in a genotype: it's supposed to be IL14H and not IL14
-sed -i 1s/IL14.bam/IL14H.bam/ ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt
 ```
 
 Additional information about the SV is displayed on its ID, since hapmap format doesn't have fields available for adding such information. For example, the ID `del.chr1.51711.71809` on the first column of the hapmap file means that the SV is a deletion on chr1 that starts at 51,711 and ends at 71,809. The second column will also have the chromosome location for that deletion, but the third column will contain the **midpoint position** for that SV (i.e. 61,760). These two columns will always be the coordinates according to the reference genome. Although there will be somewhat redundant information on IDs of most SVs (like DELs, DUPs, INSs, and INVs), the ID will contain very important info about translocations, as it will show the respective location of the TRA in the **non-reference chromosome**.
