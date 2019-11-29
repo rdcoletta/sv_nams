@@ -147,36 +147,34 @@ Importantly, any SV called as heterozygous in the VCF file (i.e. `0/1`) was cons
 
 ### Remove SNPs that are within the boundaries of a SV
 
-SNPs that are found inside SVs are problematic, because they will have segregation issues when you compare multiple lines that have or not that SV. Thus, I wrote `scripts/extract_SNPs_within_SVs.py` to extract SNPs that are within SV boundaries and `scripts/remove_SNPs_within_SVs.R` to remove them. I made two different scripts because it is faster to filter a huge data table than it is to write one line by line.
+SNPs that are found inside deletions are problematic, because they will have segregation issues when you compare multiple lines that have or not that SV. Thus, I wrote `scripts/generate_SV_bed.py` to create a BED file with start and end positions of deletions smaller than 1 Mb, and then filter out SNPs that fall within those boundaries using TASSEL's `-FilterSiteBuilderPlugin`. I set up a 1 Mb threshold because there were some extremely large deletions (>100 Mb) that would make me remove nearly all SNPs in this step.
+
+> Translocations can cause SNP segregation issues as well. However, dealing with translocations is even more complicated, especially for SV projection and downstream GWAS. Thus, we will ignore this complexity by treating a translocation as a deletion of size 1.
 
 ```bash
 # go to project folder
 cd ~/projects/sv_nams
 
-# get list of SNP positions to be removed
+# create bed file with deletion boundaries
+python scripts/generate_SV_bed.py data/NAM_founders_SVs.hmp.txt data/tmp/SNPs_to_remove.bed
+# remove bed file's header for TASSEL compatibility
+sed -i 1d data/tmp/SNPs_to_remove.bed
+
+# remove SNPs within deletions
 for i in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  python scripts/extract_SNPs_within_SVs.py data/tmp/NAM_founders_SNPs.$i.hmp.txt data/NAM_founders_SVs.hmp.txt data/tmp/SNPs_to_remove --SVs_pos
+  run_pipeline.pl -Xmx10g -importGuess data/tmp/NAM_founders_SNPs.$i.hmp.txt -FilterSiteBuilderPlugin -includeSites false -bedFile data/tmp/SNPs_to_remove.bed -endPlugin -export data/NAM_founders_SNPs_$i\_not-in-SVs_ -exportType HapmapDiploid
 done
 
-# merge SNPs to remove from scaffolds into one file
-for scaf_file in $(ls data/tmp/SNPs_to_remove_SCAF_*.txt); do
-  cat $scaf_file >> data/tmp/SNPs_to_remove_scaffs.txt
+# the filter plugin generates two output files. The only one I need is the hmp file
+# I removed the json file and renamed the hmp file (for consistency)
+for i in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
+  rm data/NAM_founders_SNPs_$i\_not-in-SVs_2.json.gz
+  mv data/NAM_founders_SNPs_$i\_not-in-SVs_1.hmp.txt data/NAM_founders_SNPs.$i.not-in-SVs.hmp.txt
 done
 
-# remove SNPs within SVs for each chromosome in parallel
-for i in {1..10}; do
-  Rscript scripts/remove_SNPs_within_SVs.R data/tmp/NAM_founders_SNPs.chr$i.hmp.txt data/tmp/SNPs_to_remove_$i.txt data/NAM_founders_SNPs.chr$i.not-in-SVs.hmp.txt &
-done
-# do the same for scaffolds
-Rscript scripts/remove_SNPs_within_SVs.R data/tmp/NAM_founders_SNPs.scaffs.hmp.txt data/tmp/SNPs_to_remove_scaffs.txt data/NAM_founders_SNPs.scaffs.not-in-SVs.hmp.txt
-
-# correct typo in a genotype: it's supposed to be M37W and not MS37W
-sed -i 1s/MS37W/M37W/ ~/projects/sv_nams/data/NAM_founders_SNPs.*
-
-wc -l data/tmp/NAM_founders_SNPs.*.hmp.txt
-# 27,272,341 SNPs total
-wc -l data/NAM_founders_SNPs.*.not-in-SVs.hmp.txt
-# 21,949,085 SNPs not in SVs
+# quick check how many SNPs were removed
+wc -l data/tmp/NAM_founders_SNPs.*.hmp.txt         # 27,272,341 SNPs total
+wc -l data/NAM_founders_SNPs.*.not-in-SVs.hmp.txt  # 14,441,003 SNPs not in SVs
 
 
 # # remove intermediate files
