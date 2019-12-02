@@ -1,3 +1,9 @@
-install_iRODS.md
 .DS_Store
+.Rhistory
 data/*
+tests/*
+.Rproj.user
+*.Rproj
+analysis/*
+tests_README.md
+notes/*
