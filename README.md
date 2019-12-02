@@ -172,10 +172,12 @@ for i in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
   mv data/NAM_founders_SNPs_$i\_not-in-SVs_1.hmp.txt data/NAM_founders_SNPs.$i.not-in-SVs.hmp.txt
 done
 
+# correct typo in a genotype: it's supposed to be M37W and not MS37W
+sed -i 1s/MS37W/M37W/ ~/projects/sv_nams/data/NAM_founders_SNPs.*
+
 # quick check how many SNPs were removed
 wc -l data/tmp/NAM_founders_SNPs.*.hmp.txt         # 27,272,341 SNPs total
 wc -l data/NAM_founders_SNPs.*.not-in-SVs.hmp.txt  # 14,441,003 SNPs not in SVs
-
 
 # # remove intermediate files
 # rm data/tmp/*
@@ -362,6 +364,8 @@ Rscript ~/projects/sv_nams/scripts/summary_raw_gbs.R ~/projects/sv_nams/data/GBS
 
 
 Selected only polymorphic, then SNPs present in more than 30% of RILs, and use sliding window approach to remove incorrect calls (resulted in about 30k SNPs) with `select_best_SNPs_per_pop.R`
+
+<mark> ADD FILTER: remove SNPs with AF < 0.4 and AF > 0.6
 
 ```bash
 mkdir ~/projects/sv_nams/analysis/qc
