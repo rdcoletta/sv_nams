@@ -147,37 +147,37 @@ Importantly, any SV called as heterozygous in the VCF file (i.e. `0/1`) was cons
 
 ### Remove SNPs that are within the boundaries of a SV
 
-SNPs that are found inside deletions are problematic, because they will have segregation issues when you compare multiple lines that have or not that SV. Thus, I wrote `scripts/generate_SV_bed.py` to create a BED file with start and end positions of deletions smaller than 1 Mb, and then filter out SNPs that fall within those boundaries using TASSEL's `-FilterSiteBuilderPlugin`. I set up a 1 Mb threshold because there were some extremely large deletions (>100 Mb) that would make me remove nearly all SNPs in this step.
+SNPs that are found inside deletions are problematic, because they will have segregation issues when you compare multiple lines that have or not that SV. Thus, I wrote `scripts/generate_SV_bed.py` to create a BED file with start and end positions of deletions smaller than 100kb, and then filter out SNPs that fall within those boundaries using TASSEL's `-FilterSiteBuilderPlugin`. I set up a 100 kb threshold because there were some extremely large deletions (>100 Mb) that would make me remove nearly all SNPs in this step and more than ~95% of the deletions were within that range.
 
-> Translocations can cause SNP segregation issues as well. However, dealing with translocations is even more complicated, especially for SV projection and downstream GWAS. Thus, we will ignore this complexity by treating a translocation as a deletion of size 1.
+> Translocations can cause SNP segregation issues as well. However, dealing with translocations is even more complicated, especially for SV projection and downstream GWAS, and we will ignore them here.
 
 ```bash
 # go to project folder
 cd ~/projects/sv_nams
 
-# create bed file with deletion boundaries
-python scripts/generate_SV_bed.py data/NAM_founders_SVs.hmp.txt data/tmp/SNPs_to_remove.bed
-# remove bed file's header for TASSEL compatibility
-sed -i 1d data/tmp/SNPs_to_remove.bed
-
-# remove SNPs within deletions
-for i in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  run_pipeline.pl -Xmx10g -importGuess data/tmp/NAM_founders_SNPs.$i.hmp.txt -FilterSiteBuilderPlugin -includeSites false -bedFile data/tmp/SNPs_to_remove.bed -endPlugin -export data/NAM_founders_SNPs_$i\_not-in-SVs_ -exportType HapmapDiploid
+# column numbers corresponding to NAM parents range from 13 to 37
+for i in {13..37}; do
+  # get NAM name
+  NAM=$(head -n 1 data/NAM_founders_SVs.hmp.txt | cut -f $i)
+  # create SV files for each NAM cross
+  cut -f 1-12,$i data/NAM_founders_SVs.hmp.txt > data/NAM_founders_SVs_B73x$NAM.hmp.txt
+  # create bed file with deletion boundaries for each population
+  python scripts/generate_SV_bed.py data/NAM_founders_SVs_B73x$NAM.hmp.txt data/tmp/SNPs_to_remove_B73x$NAM.bed
+  # # remove bed file's header for TASSEL compatibility
+  # sed -i 1d data/tmp/SNPs_to_remove_B73x$NAM.bed
 done
 
-# the filter plugin generates two output files. The only one I need is the hmp file
-# I removed the json file and renamed the hmp file (for consistency)
-for i in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  rm data/NAM_founders_SNPs_$i\_not-in-SVs_2.json.gz
-  mv data/NAM_founders_SNPs_$i\_not-in-SVs_1.hmp.txt data/NAM_founders_SNPs.$i.not-in-SVs.hmp.txt
-done
+# after running the above, I noticed that 3 NAM parent names were slighlty different
+# from the parental names in the GBS data (upper and lower case problme)
+# so, I decided to change names of crosses now to avoid mismatches downstream
+mv data/NAM_founders_SVs_B73xHP301.hmp.txt data/NAM_founders_SVs_B73xHp301.hmp.txt
+mv data/NAM_founders_SVs_B73xIL14H.hmp.txt data/NAM_founders_SVs_B73xIl14H.hmp.txt
+mv data/NAM_founders_SVs_B73xOh7b.hmp.txt data/NAM_founders_SVs_B73xOh7B.hmp.txt
 
-# correct typo in a genotype: it's supposed to be M37W and not MS37W
-sed -i 1s/MS37W/M37W/ ~/projects/sv_nams/data/NAM_founders_SNPs.*
+mv data/tmp/SNPs_to_remove_B73xHP301.bed data/tmp/SNPs_to_remove_B73xHp301.bed
+mv data/tmp/SNPs_to_remove_B73xIL14H.bed data/tmp/SNPs_to_remove_B73xIl14H.bed
+mv data/tmp/SNPs_to_remove_B73xOh7b.bed data/tmp/SNPs_to_remove_B73xOh7B.bed
 
-# quick check how many SNPs were removed
-wc -l data/tmp/NAM_founders_SNPs.*.hmp.txt         # 27,272,341 SNPs total
-wc -l data/NAM_founders_SNPs.*.not-in-SVs.hmp.txt  # 14,441,003 SNPs not in SVs
 
 # # remove intermediate files
 # rm data/tmp/*
@@ -223,13 +223,6 @@ head -n 1 data/GBS-output/populations.sumstats.tsv | cut -f 2 > data/nam_ril_pop
 # rearrange information in a table
 python scripts/create_file_with_nam_rils_info.py data/nam_ril_populations.txt
 
-# create a file with SNP positions from NAM parents to keep in NAM RILs
-for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  sed 1d data/NAM_founders_SNPs.$chr.not-in-SVs.hmp.txt | cut -f 3,4 > data/GBS-output/tmp/SNPs-to-keep_from_NAM_founders.$chr.txt
-  sed -i "y/SCAF/scaf/" data/GBS-output/tmp/SNPs-to-keep_from_NAM_founders.$chr.txt
-  sed -i "s/^[0-9][0-9]*/chr&/1" data/GBS-output/tmp/SNPs-to-keep_from_NAM_founders.$chr.txt
-done
-
 # read "data/nam_ril_populations.txt" file line by line for each chromosome
 for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
   {
@@ -248,7 +241,7 @@ for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
       # use vcftools to filter a vcf file
       vcftools --vcf data/GBS-output/tmp/NAM_rils_SNPs.$chr.vcf \
                --keep data/GBS-output/tmp/$cross/genotypes_to_keep.txt \
-               --positions data/GBS-output/tmp/SNPs-to-keep_from_NAM_founders.$chr.txt \
+               --exclude-bed data/tmp/SNPs_to_remove_$cross.bed \
                --out data/GBS-output/tmp/$cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs \
                --recode \
                --recode-INFO-all
@@ -290,6 +283,13 @@ To correct that, I collapsed these duplicates with `scripts/collapse_GBS_markers
 | chr | pos | B73 | Parent 2 | RIL 1 | RIL 2 | RIL 3 |
 | --- | --- | --- | -------- | ----- | ----- | ----- |
 | 1   | 100 | TT  | AA       | NN    | AA    | NN    |
+
+
+
+
+
+
+
 
 
 ```bash
@@ -335,59 +335,20 @@ done
 
 
 
+### Select best GBS markers
 
-
-
-
-
-
-
-
-
-
-Summary raw gbs data:
-
-write final table
-plot final distribution of missing data all crosses
-plot distribution -- missing data from rils of all families
-plot distribution -- missing snps from all families
+GBS data contain a lot of missing data and also a lot of redundant information (many SNPs tightly linked). Besides increasing computation time with such big dataset, I also found in my preliminary analysis that using this raw GBS data had a strong negative impact on projections. Thus, we decided to filter this dataset by selecting only polymorphic SNPs, SNPs present in at least 30% of RILs, using a sliding window approach to remove incorrect calls (see Huang et al, Genome Research, 2009) and removing SNPs with allele frequency < 0.4 or > 0.6. To do that, I ran `scripts/select_best_SNPs_per_pop.R`.
 
 ```bash
+# go to data folder
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
-Rscript ~/projects/sv_nams/scripts/summary_raw_gbs.R ~/projects/sv_nams/data/GBS-output/tmp ~/projects/sv_nams/analysis/qc/raw_gbs
-```
+# filter SNPs
+for cross in $(ls -d B73x*); do
+  Rscript ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.R $cross $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt ~/projects/sv_nams/analysis/qc/filter_best_SNPs --max_missing=0.3 --window_size=15 --window_step=1 --min_snps_per_window=5
+done
 
-
-
-
-
-
-Selected only polymorphic, then SNPs present in more than 30% of RILs, and use sliding window approach to remove incorrect calls (resulted in about 30k SNPs) with `select_best_SNPs_per_pop.R`
-
-<mark> ADD FILTER: remove SNPs with AF < 0.4 and AF > 0.6
-
-```bash
-mkdir ~/projects/sv_nams/analysis/qc
-
-# # filter snps
-# Rscript ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.R B73xB97 \
-#                                                               B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.not-imputed.hmp.txt \
-#                                                               B73xB97/NAM_gbs-parents_SNPs.B73xB97.not-in-SVs.reseq-overlay.hmp.txt \
-#                                                               ~/projects/sv_nams/analysis/qc/filter_best_SNPs \
-#                                                               --max_missing=0.3 --window_size=15 --window_step=1 --min_snps_per_window=5
-
-# cd ~/projects/sv_nams/data/GBS-output/tmp/
-# for cross in $(ls -d B73x*); do
-#   echo "Rscript ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.R $cross $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt ~/projects/sv_nams/analysis/qc/filter_best_SNPs --max_missing=0.3 --window_size=15 --window_step=1 --min_snps_per_window=5"
-# done > ~/projects/sv_nams/scripts/commands_for_select-best-markers.txt
-#
-# qsub select_best_SNPs_per_pop_large.sh
-
-
-qsub select_best_SNPs_per_pop.sh
-
-
+# check how many SNPs remained
 wc -l B73x*/*.not-imputed.best-markers.hmp.txt
 #
 
@@ -397,128 +358,53 @@ wc -l B73x*/*.not-imputed.best-markers.hmp.txt
 
 
 
+### Summary
 
+**Before filtering**
 
-**My guess is that projection will need to be tuned for different crosses...**
-**Probably will have to select top 30k markers, instead of percent present in RILs and/or include monomorphic as well**
+I wrote `scripts/summary_raw_gbs.R` to plot some basic statistics such as total number of RILs, total number of SNPs, percentage of missing data and percentage of polymorphic SNPs for each population. It also plots the distribution of missing data per population, missing data per RIL, and missing data per SNP.
 
+| Total number SNPs | Average missing data | Average polymorphic |
+| ----------------- | -------------------- | ------------------- |
+| 766,817           | 0.88                 | 0.28                |
 
+```bash
+cd ~/projects/sv_nams/
 
+# create new folder to store qc results
+mkdir -p analysis/qc
 
-Impute missing SNPs with FSFHap for each cross:
+# summarize data
+Rscript scripts/summary_raw_gbs.R data/GBS-output/tmp analysis/qc/raw_gbs
+```
+
+In order to visualize how the markers are distributed along the chromosomes, I ploted karyotypes of 3 random RILs for each population with `scripts/plot_ril_karyotypes.R`. I used the chromosome coordinates from `analysis/qc/B73_RefGen_V4_chrm_info.txt` and the centromere positions from `analysis/qc/centromeres_Schneider-2016-pnas_v4.bed`.
 
 
 ```bash
-# create pedigree file for FSFHap plugin from tassel
-cd ~/projects/sv_nams
-python scripts/id2pedigree.py data/nam_ril_populations.txt data/nam_rils_pedigree.txt
-
-
-# impute missing data without fill gaps
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
-# raw gbs
-# run_pipeline.pl -Xmx10g -h B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.not-imputed.hmp.txt -FSFHapImputationPlugin -pedigrees ~/projects/sv_nams/data/nam_rils_pedigree.txt -logfile B73xB97/fsfhap_raw-gbs.log -cluster true -bc false -fillgaps false -endPLugin -export B73xB97/NAM_rils_SNPs -exportType HapmapDiploid
+# create karyotypes
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -h $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt -FSFHapImputationPlugin -pedigrees ~/projects/sv_nams/data/nam_rils_pedigree.txt -logfile $cross/fsfhap_raw-gbs.log -cluster true -bc false -fillgaps false -endPLugin -export $cross/NAM_rils_SNPs -exportType HapmapDiploid
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/raw-gbs $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=random --parents_in_data=TRUE --overlay_reseq=TRUE
 done
 
-# best markers
-# run_pipeline.pl -Xmx10g -h B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.not-imputed.best-markers.hmp.txt -FSFHapImputationPlugin -pedigrees ~/projects/sv_nams/data/nam_rils_pedigree.txt -logfile B73xB97/fsfhap_best-markers.log -cluster true -bc false -fillgaps false -endPLugin -export B73xB97/NAM_rils_SNPs_best-markers -exportType HapmapDiploid
+# run extra qc with TASSEL
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -h $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt -FSFHapImputationPlugin -pedigrees ~/projects/sv_nams/data/nam_rils_pedigree.txt -logfile $cross/fsfhap_best-markers.log -cluster true -bc false -fillgaps false -endPLugin -export $cross/NAM_rils_SNPs_best-markers -exportType HapmapDiploid
+  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/raw_gbs/NAM_rils_SNPs_raw-gbs_$cross\_OverallSummary
+  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/raw_gbs/NAM_rils_SNPs_raw-gbs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/raw_gbs/missing_data_raw-gbs.txt
 done
-
-
-# change file name of output from tassel
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-# raw gbs
-# mv B73xB97/NAM_rils_SNPs2.hmp.txt B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.FSFHap-imputed.hmp.txt
-for cross in $(ls -d B73x*); do
-  mv $cross/NAM_rils_SNPs2.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.hmp.txt
-done
-
-# best makers
-# mv B73xB97/NAM_rils_SNPs_best-markers2.hmp.txt B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt
-for cross in $(ls -d B73x*); do
-  mv $cross/NAM_rils_SNPs_best-markers2.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt
-done
-
-
 ```
 
 
+**After filtering**
 
-
-
-
-QC raw GBS and filtered set before and after imputation with `plot_rils_karyotypes.R`:
-
+When I filtered the raw gbs, `scripts/select_best_SNPs_per_pop.R` already produces some summary data. Thus, I just needed to generate the karyotypes for the same RILs used before filtering.
 
 ```bash
-
-### CREATE COMMAND FILE TO RUN THIS IN PARALLEL (USE ECHO TO PRINT ALL COMMANDS)
-# note: make sure to that you enable X11 forwarding before running this script
-
-module load R/3.6.0
-
-# Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt \
-#                                                          ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed \
-#                                                          B73xB97 \
-#                                                          ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_raw-gbs \
-#                                                          B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.not-imputed.hmp.txt \
-#                                                          B73xB97/NAM_gbs-parents_SNPs.B73xB97.not-in-SVs.reseq-overlay.hmp.txt \
-#                                                          --rils=random --parents_in_data=TRUE --overlay_reseq=TRUE
-
-# karyotypes before FSFHap imputation
-
-# raw-gbs
 cd ~/projects/sv_nams/data/GBS-output/tmp/
-for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_raw-gbs $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=random --parents_in_data=TRUE --overlay_reseq=TRUE
-done
 
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_before-FSFHap_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_before-FSFHap_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/missing_data_before_imputation_raw-gbs.txt
-done
-
-
-# best markers
-for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_best-markers $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=random --parents_in_data=TRUE --overlay_reseq=FALSE
-done
-
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_before-FSFHap_$cross\_best-markers_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_before-FSFHap_$cross\_best-markers_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/missing_data_before_imputation_best-markers.txt
-done
-
-# 0.22392 (window size 10, minimum SNPs 5)
-# 0.19517 (window size 10, minimum SNPs 3)
-# 0.55202 (window size 15, minimum SNPs 8)
-# 0.52677 (no sliding window)
-
-
-# karyotypes after FSFHap imputation
-
-# raw gbs
-for cross in $(ls -d B73x*); do
-  # ugly way to get the names of rils used to plot karyotype before imputation
-  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_raw-gbs/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
-  # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/after_imputation_raw-gbs $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=$rils --parents_in_data=FALSE --overlay_reseq=FALSE
-done
-
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/missing_data_after_imputation_raw-gbs.txt
-done
-
-
-
-# best markers
+# create karyotypes
 for cross in $(ls -d B73x*); do
   # ugly way to get the names of rils used to plot karyotype before imputation
   rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_raw-gbs/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
@@ -526,19 +412,11 @@ for cross in $(ls -d B73x*); do
   Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/after_imputation_best-markers $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt --rils=$rils --parents_in_data=FALSE --overlay_reseq=FALSE
 done
 
+# run extra qc with TASSEL
 for cross in $(ls -d B73x*); do
   run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_best-markers_OverallSummary
   (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_best-markers_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/missing_data_after_imputation_best-markers.txt
 done
-
-
-#### B73xHp301 and B73xM162W actually increased number of missing data
-
-
-# 0.19249 (window size 10, minimum SNPs 5)
-# 0.16625 (window size 10, minimum SNPs 3)
-# 0.47576 (window size 15, minimum SNPs 8)
-# 0.41132 (no sliding window)
 ```
 
 
@@ -549,7 +427,7 @@ Make sure SNPs from FSFHap imputed RILs have the same name as the ones from pare
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/correct_SNP-names_rils.R $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt
+  Rscript ~/projects/sv_nams/scripts/correct_SNP-names_rils.R $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt
 done
 ```
 
