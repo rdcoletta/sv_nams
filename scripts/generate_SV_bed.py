@@ -16,20 +16,26 @@ from natsort import natsorted
 # initialize argument parser (pass user input from command line to script)
 parser = ap.ArgumentParser(formatter_class=ap.RawDescriptionHelpFormatter,
                            description='''
-description: this script generates a BED file containing deletions and
-             translocations smaller than 1 Mb from a hapmap file containing
-             structural variant calls.''')
+description: this script generates a BED file containing deletions from a
+             hapmap file containing structural variant calls.''')
 # add positional arguments
 parser.add_argument("hmp_SVs", type=str,
                     help="hapmap file with structural variant calls")
 parser.add_argument("output_name", type=str,
                     help="name of output file")
+parser.add_argument("--one_NAM_parent", action="store_true",
+                    help="add this option if want to retrieve deletion only "
+                    "from the first non-B73 NAM parent in the hapmap file")
 # optional argument for which type of variants to exclude?
 
 # pass arguments into variables
 args = parser.parse_args()
 hmp_SVs = args.hmp_SVs
 output_name = args.output_name
+if args.one_NAM_parent:
+    one_NAM_parent = True
+else:
+    one_NAM_parent = False
 
 
 # funtion to extract positions of SNPs or SVs
@@ -47,23 +53,32 @@ def get_variant_info(hmp_file):
         chr = line[2]
         # get sv type
         sv_type = line[0].split(".")[0]
-        # keep only deletions or translocations
-        if sv_type == "tra" or sv_type == "del":
-            # get sv location
-            if sv_type == "tra":
-                # get position on reference genome for TRA
-                # NOTE: still need to get END position with Arun...
-                sv_start = line[3]
-                sv_end = str(int(sv_start) + 1)
-            if sv_type == "del":
-                sv_start = line[0].split(".")[2]
-                sv_end = line[0].split(".")[3]
-            # add sv info to dictionary
-            sv_info = sv_start + "," + sv_end + "," + sv_type
-            if chr not in variant_info:
-                variant_info[chr] = [sv_info]
-            else:
-                variant_info[chr].append(sv_info)
+        # keep only deletions
+        if sv_type == "del":
+            sv_start = line[0].split(".")[2]
+            sv_end = line[0].split(".")[3]
+        # add sv info to dictionary if SV is present in specific NAM line...
+        if one_NAM_parent:
+            b73_geno = line[11]
+            nam_geno = line[12]
+            if (b73_geno != "TT" and nam_geno == "TT") or (b73_geno == "TT" and nam_geno != "TT"):
+                # get information and add to dictionary
+                sv_info = sv_start + "," + sv_end + "," + sv_type
+                if chr not in variant_info:
+                    variant_info[chr] = [sv_info]
+                else:
+                    variant_info[chr].append(sv_info)
+        # ...or in at least one line
+        else:
+            b73_geno = line[11]
+            nam_genos = line[12:]
+            if (b73_geno != "TT" and "TT" in nam_genos) or (b73_geno == "TT" and ("AA" or "NN") in nam_genos):
+                # get information and add to dictionary
+                sv_info = sv_start + "," + sv_end + "," + sv_type
+                if chr not in variant_info:
+                    variant_info[chr] = [sv_info]
+                else:
+                    variant_info[chr].append(sv_info)
 
     return variant_info
 
@@ -83,9 +98,9 @@ with open(output_name, "w") as bedfile:
         for coord in SVs_info[chr]:
             sv_start = coord.split(",")[0]
             sv_end = coord.split(",")[1]
-            # don't consider SVs bigger than 1Mb
-            if abs(int(sv_end) - int(sv_start)) < 1000000:
-                print(chr, sv_start, sv_end, sep="\t", file=bedfile)
+            # don't consider SVs bigger than 100kb
+            if abs(int(sv_end) - int(sv_start)) < 100000:
+                print("chr" + chr, sv_start, sv_end, sep="\t", file=bedfile)
 # sort bed file by chrom and position
 bed_table = pd.read_table(output_name, sep="\t",
                           keep_default_na=False, dtype="unicode")
