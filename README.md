@@ -364,11 +364,11 @@ From ~1 million SNPs for each population, the number of best SNPs selected varie
 
 **Before filtering**
 
-I wrote `scripts/summary_raw_gbs.R` to plot some basic statistics such as total number of RILs, total number of SNPs, percentage of missing data and percentage of polymorphic SNPs for each population. It also plots the distribution of missing data per population, missing data per RIL, and missing data per SNP.
+I wrote `scripts/summary_raw_gbs.R` to plot some basic statistics of the raw GBS SNPs (after collapsing duplicates) such as total number of RILs, total number of SNPs, percentage of missing data and percentage of polymorphic SNPs for each population. It also plots the distribution of missing data per population, missing data per RIL, and missing data per SNP.
 
-| Total number SNPs | Average missing data | Average polymorphic |
-| ----------------- | -------------------- | ------------------- |
-| 766,817           | 0.88                 | 0.28                |
+| Average number SNPs | Average missing data | Average polymorphic |
+| ------------------- | -------------------- | ------------------- |
+|                     |                      |                     |
 
 ```bash
 cd ~/projects/sv_nams/
@@ -380,7 +380,7 @@ mkdir -p analysis/qc
 Rscript scripts/summary_raw_gbs.R data/GBS-output/tmp analysis/qc/raw_gbs
 ```
 
-In order to visualize how the markers are distributed along the chromosomes, I ploted karyotypes of 3 random RILs for each population with `scripts/plot_ril_karyotypes.R`. I used the chromosome coordinates from `analysis/qc/B73_RefGen_V4_chrm_info.txt` and the centromere positions from `analysis/qc/centromeres_Schneider-2016-pnas_v4.bed`.
+In order to visualize how the markers are distributed along the chromosomes, I ploted karyotypes of 3 random RILs for each population with `scripts/plot_ril_karyotypes.R`. I used the chromosome coordinates from `analysis/qc/B73_RefGen_V4_chrm_info.txt` and the centromere positions from `analysis/qc/centromeres_Schneider-2016-pnas_v4.bed`, which are from B73 v4 reference genome.
 
 
 ```bash
@@ -391,11 +391,11 @@ for cross in $(ls -d B73x*); do
   Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/raw-gbs $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=random --parents_in_data=TRUE --overlay_reseq=TRUE
 done
 
-# run extra qc with TASSEL
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/raw_gbs/NAM_rils_SNPs_raw-gbs_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/raw_gbs/NAM_rils_SNPs_raw-gbs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/raw_gbs/missing_data_raw-gbs.txt
-done
+# # run extra qc with TASSEL
+# for cross in $(ls -d B73x*); do
+#   run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/raw_gbs/NAM_rils_SNPs_raw-gbs_$cross\_OverallSummary
+#   (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/raw_gbs/NAM_rils_SNPs_raw-gbs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/raw_gbs/missing_data_raw-gbs.txt
+# done
 ```
 
 
@@ -414,14 +414,14 @@ for cross in $(ls -d B73x*); do
   Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/best-markers $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=$rils --parents_in_data=TRUE --overlay_reseq=FALSE
 done
 
-# run extra qc with TASSEL
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/best-markers/NAM_rils_SNPs_best-markers_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/best-markers/NAM_rils_SNPs_best-markers_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/best-markers/missing_data_best-markers.txt
-done
+# # run extra qc with TASSEL
+# for cross in $(ls -d B73x*); do
+#   run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/best-markers/NAM_rils_SNPs_best-markers_$cross\_OverallSummary
+#   (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/best-markers/NAM_rils_SNPs_best-markers_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/best-markers/missing_data_best-markers.txt
+# done
 ```
 
-Make sure SNPs from RILs have the same name as the ones from parents
+Finally, I wrote `scripts/correct_SNP-names_rils.R` to make sure SNPs from RILs have the same name as the ones from parents.
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
