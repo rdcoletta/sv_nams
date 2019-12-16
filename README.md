@@ -351,9 +351,10 @@ done
 
 # check how many SNPs remained
 wc -l B73x*/*.not-imputed.best-markers.hmp.txt
-#
-
+# range from 13k to 50k
 ```
+
+From ~1 million SNPs for each population, the number of best SNPs selected varied from ~13k to ~50k depending on the population (mean of ~32k SNPs and median of ~31k).
 
 > Note: The reason why there is `not-imputed` in the filename is because during preliminary tests I tried to impute GBS SNPs using FSFHap from TASSEL to decrease the number of missing data. But after selecting the best markers, I found the imputing SNPs didn't reduce much the missing data and it was actually causing some troubles later during SV projection. So we decided not to impute SNPs at this stage.
 
