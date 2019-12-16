@@ -118,6 +118,11 @@ done
 run_pipeline.pl -SortGenotypeFilePlugin -inputFile data/tmp/NAM_founders_SNPs.scaffs.vcf -outputFile data/tmp/NAM_founders_SNPs.scaffs.sorted.vcf -fileType VCF
 # transform to diploid format (e.g. "AA" instead of "A")
 run_pipeline.pl -Xmx10g -importGuess data/tmp/NAM_founders_SNPs.scaffs.sorted.vcf -export data/tmp/NAM_founders_SNPs.scaffs.hmp.txt -exportType HapmapDiploid
+
+# correct typo in a genotype: it's supposed to be M37W and not MS37W
+for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
+  sed -i 1s/MS37W/M37W/ data/tmp/NAM_founders_SNPs.$chr.hmp.txt
+done
 ```
 
 > TASSEL throws this error when sorting vcf files `ERROR net.maizegenetics.dna.map.PositionListBuilder - validateOrdering: Position	Chr:SCAF_100	Pos:79721	InsertionPos:0	Name:SSCAF_100_79721	Variants:A/C	MAF:NaN	Ref:A and Position	Chr:SCAF_99	Pos:109272	InsertionPos:0	Name:SSCAF_99_109272	Variants:T/A	MAF:NaN	Ref:T out of order`. However, I think it's just a warning showing which positions were in the wrong position. I'm able to load the sorted vcf file and transform it into hapmap format without problems. Also, no SNP is lost when sorting the file.
@@ -177,7 +182,6 @@ mv data/NAM_founders_SVs_B73xOh7b.hmp.txt data/NAM_founders_SVs_B73xOh7B.hmp.txt
 mv data/tmp/SNPs_to_remove_B73xHP301.bed data/tmp/SNPs_to_remove_B73xHp301.bed
 mv data/tmp/SNPs_to_remove_B73xIL14H.bed data/tmp/SNPs_to_remove_B73xIl14H.bed
 mv data/tmp/SNPs_to_remove_B73xOh7b.bed data/tmp/SNPs_to_remove_B73xOh7B.bed
-
 
 # # remove intermediate files
 # rm data/tmp/*
@@ -285,13 +289,6 @@ To correct that, I collapsed these duplicates with `scripts/collapse_GBS_markers
 | 1   | 100 | TT  | AA       | NN    | AA    | NN    |
 
 
-
-
-
-
-
-
-
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
@@ -327,8 +324,12 @@ The NAM parents were genotyped by both resequencing and GBS. Thus, it is possibl
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt ~/projects/sv_nams/data/NAM_founders_SNPs.chr1.not-in-SVs.hmp.txt $cross $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt
+  Rscript ~/projects/sv_nams/scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt ~/projects/sv_nams/data/tmp/NAM_founders_SNPs.chr1.hmp.txt $cross $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt
 done
+
+# check number of SNPs per pop
+wc -l B73*/*not-in-SVs.reseq-overlay.hmp.txt
+# ~1M (with slightly different number per population)
 ```
 
 > Note: Apparently, the parent Tzi8 doesn't have gbs data. Therefore, I used the entire resequencing data for that parent.
@@ -407,21 +408,19 @@ cd ~/projects/sv_nams/data/GBS-output/tmp/
 # create karyotypes
 for cross in $(ls -d B73x*); do
   # ugly way to get the names of rils used to plot karyotype before imputation
-  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_raw-gbs/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
+  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/raw-gbs/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
   # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/after_imputation_best-markers $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt --rils=$rils --parents_in_data=FALSE --overlay_reseq=FALSE
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/best-markers $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt --rils=$rils --parents_in_data=TRUE --overlay_reseq=FALSE
 done
 
 # run extra qc with TASSEL
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_best-markers_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_best-markers_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/missing_data_after_imputation_best-markers.txt
+  run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/best-markers/NAM_rils_SNPs_best-markers_$cross\_OverallSummary
+  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/best-markers/NAM_rils_SNPs_best-markers_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/qc/best-markers/missing_data_best-markers.txt
 done
 ```
 
-
-
-Make sure SNPs from FSFHap imputed RILs have the same name as the ones from parents
+Make sure SNPs from RILs have the same name as the ones from parents
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
@@ -433,10 +432,14 @@ done
 
 
 
-
-
-
 ## Merge SNPs with SVs
+
+<mark>Write paragraph about this topic</mark>
+* Merge SVs and SNPs in one file for projection (one for parents and other for RILs)
+* Looks like B73Ab (the negative control for calling SVs for B73) has a lot of missing data. This will be problematic when plotting karyotypes or projection:
+  - B73 should not have any SV because all SVs were called against B73 ref genome
+  - B73Ab10 was used as a negative control, but there is a lot of missing data
+  - Thus I had to convert "NN" to "AA" from B73Ab10 calls, and left all non-missing calls as they were called
 
 
 ```bash
@@ -445,21 +448,18 @@ module load R/3.6.0
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 # merge svs
-
-# Rscript ~/projects/sv_nams/scripts/merge_SVs_and_SNPs.R ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt B73xB97/NAM_gbs-parents_SNPs.B73xB97.not-in-SVs.reseq-overlay.hmp.txt B73xB97/NAM_rils_SNPs.B73xB97.not-in-SVs.FSFHap-imputed.best-markers.consensus.correct-marker-names.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.B73xB97.hmp.txt ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.B73xB97.best-markers.consensus.not-projected.hmp.txt
-
 for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/merge_SVs_and_SNPs.R ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.best-markers.correct-marker-names.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.hmp.txt
+  Rscript ~/projects/sv_nams/scripts/merge_SVs_and_SNPs.R ~/projects/sv_nams/data/NAM_founders_SVs_$cross.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.correct-marker-names.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.hmp.txt
 done
 
-
+# check that parents and rils have the same number of markers
 for cross in $(ls -d B73x*); do
   wc -l ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt
   wc -l ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.hmp.txt
 done
-
-
 ```
+
+
 
 
 
@@ -503,12 +503,11 @@ Quick summary:
 
 
 ```bash
-
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 # sort parents sv+snps
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt -outputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -fileType Hapmap
+  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/S.$cross.hmp.txt -outputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -fileType Hapmap
   run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -export ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -exportType HapmapDiploid
 done
 
@@ -527,256 +526,96 @@ done
 
 
 # create new folder
-mkdir ~/projects/sv_nams/analysis/imputation
+mkdir ~/projects/sv_nams/analysis/projection
 
 # create command files
 for cross in $(ls -d B73x*); do
   # create haplotypes from parents
-  echo "run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/imputation/donors_$cross -hapSize 1000 -minTaxa 1"
+  echo "run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/projection/donors_$cross -hapSize 2000 -minTaxa 1"
 done > ~/projects/sv_nams/scripts/commands_for_create_haplotypes_for_projection.txt
 
 for cross in $(ls -d B73x*); do
   # impute ril genotypes based on
-  echo "run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/imputation/donors_$cross -o ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -hapSize 1000 -accuracy"
+  echo "run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/projection/donors_$cross -o ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -hapSize 2000 -accuracy -hybNN false"
 done > ~/projects/sv_nams/scripts/commands_for_project_SVs.txt
 
-
-qsub create_haplotypes_for_projection.sh
-qsub project_SVs.sh
-
-
-for cross in $(ls -d B73x*); do
-  # convert to hapmap diploid
-  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -export ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -exportType HapmapDiploid
-done
-
-```
-
-
-
-QC SV projection:
-
-```bash
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-Rscript ~/projects/sv_nams/scripts/count_projected_SVs.R ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt ~/projects/sv_nams/analysis/imputation
-
-
-# best markers
-for cross in $(ls -d B73x*); do
-  # ugly way to get the names of rils used to plot karyotype before imputation
-  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/after_imputation_best-markers/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
-  # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_SVs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/SV_projection ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt --rils=$rils
-done
-
-
-
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/imputation/NAM_rils_SVs-SNPs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/imputation/missing_data_after_SV-projection_best-markers.txt
-done
-
-
-# 0.82248 (window size 10, minimum SNPs 5)
-# 0.81671 (window size 10, minimum SNPs 3)
-# 0.88475 (window size 15, minimum SNPs 8)
-# 0.86701 (no sliding window)
-
-```
-
-Count SVs with `count_projected_SVs.R`:
-* window size 10, minimum SNPs 5 = 70k
-* window size 10, minimum SNPs 3 = 70k
-* window size 15, minimum SNPs 8 = 50k
-* no sliding window: 22k = 20k
-* no filtering at all = 4k
-
-
-
-
-
-## Redo projection without imputation
-
-```bash
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-B73x*/*.not-imputed.best-markers.hmp.txt
-
-
-
-#### make sure SNPs from FSFHap imputed RILs have the same name as the ones from parents
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-module load R/3.6.0
-
-for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/correct_SNP-names_rils.R $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt
-done
-
-
-#### merge svs
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/merge_SVs_and_SNPs.R ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.correct-marker-names.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.hmp.txt
-done
-
-
-for cross in $(ls -d B73x*); do
-  wc -l ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt
-  wc -l ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.hmp.txt
-done
-
-
-
-#### projection
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-# sort parents sv+snps
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt -outputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -fileType Hapmap
-  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -export ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -exportType HapmapDiploid
-done
-
-# sort rils sv+snps
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.hmp.txt -outputFile ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.sorted.hmp.txt -fileType Hapmap
-  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.sorted.hmp.txt -export ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.sorted.hmp.txt -exportType HapmapDiploid
-done
-
-# just number of rows
-for cross in $(ls -d B73x*); do
-  wc -l ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt
-  wc -l ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.sorted.hmp.txt
-done
-
-
-
-# create new folder
-mkdir ~/projects/sv_nams/analysis/projection_no-imp
-
-# create command files
-for cross in $(ls -d B73x*); do
-  # create haplotypes from parents
-  echo "run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/projection_no-imp/donors_$cross -hapSize 1000 -minTaxa 1"
-done > ~/projects/sv_nams/scripts/commands_for_create_haplotypes_for_projection_no-imp.txt
-
-for cross in $(ls -d B73x*); do
-  # impute ril genotypes based on
-  echo "run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/projection_no-imp/donors_$cross -o ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -hapSize 1000 -accuracy"
-done > ~/projects/sv_nams/scripts/commands_for_project_SVs_no-imp.txt
-
-
-qsub ~/projects/sv_nams/scripts/create_haplotypes_for_projection_no-imp.sh
-qsub ~/projects/sv_nams/scripts/project_SVs_no-imp.sh
-
+parallel --jobs 3 < ~/projects/sv_nams/scripts/commands_for_create_haplotypes_for_projection.txt
+parallel --jobs 3 < ~/projects/sv_nams/scripts/commands_for_project_SVs.txt
 
 
 for cross in $(ls -d B73x*); do
   # convert to hapmap diploid
-  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -export ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -exportType HapmapDiploid
+  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -export ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -exportType HapmapDiploid
 done
+```
 
 
+QC projection:
+* Count SVs with `count_projected_SVs.R`
 
+
+```bash
 #### QC projection
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
-Rscript ~/projects/sv_nams/scripts/count_projected_SVs.R ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt ~/projects/sv_nams/analysis/projection_no-imp
+Rscript ~/projects/sv_nams/scripts/count_projected_SVs.R ~/projects/sv_nams/data ~/projects/sv_nams/analysis/projection
 
+# plot karyotypes of SVs present in each parent of a cross
+for cross in $(ls -d B73x*); do
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_SVs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/projection ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt --rils=$rils --expected-SVs=TRUE
+done
+
+# now plot karyotypes with projected SVs for few RILs of each cross
 for cross in $(ls -d B73x*); do
   # ugly way to get the names of rils used to plot karyotype before imputation
-  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_best-markers/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
+  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/best-markers/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
   # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_SVs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/SV_projection_no-imp ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt --rils=$rils
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_SVs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/projection ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt --rils=$rils --expected-SVs=FALSE
 done
 
 
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/projection_no-imp/NAM_rils_SVs-SNPs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/projection_no-imp/missing_data_after_SV-projection_not-imputed_best-markers.txt
+  run_pipeline.pl -Xmx6g -importGuess ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs_$cross\_OverallSummary
+  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/projection/missing_data_best-markers_after_SV-projection.txt
 done
 
 ```
 
 
 
-## Re-run projection without combining haplotypes in het regions (`-hybNN false`)
+## Merge all projected SVs of each population in one file
 
+`scripts/merge_SVs_after_projection.R`
 
-```bash
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-# create new folder
-mkdir ~/projects/sv_nams/analysis/projection_no-imp_corrected
-
-# create command files
-for cross in $(ls -d B73x*); do
-  # create haplotypes from parents
-  echo "run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/projection_no-imp_corrected/donors_$cross -hapSize 1000 -minTaxa 1"
-done > ~/projects/sv_nams/scripts/commands_for_create_haplotypes_for_projection_no-imp.txt
-
-for cross in $(ls -d B73x*); do
-  # impute ril genotypes based on
-  echo "run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/projection_no-imp_corrected/donors_$cross -o ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -hapSize 1000 -accuracy -hybNN false"
-done > ~/projects/sv_nams/scripts/commands_for_project_SVs_no-imp.txt
-
-
-qsub ~/projects/sv_nams/scripts/create_haplotypes_for_projection_no-imp.sh
-qsub ~/projects/sv_nams/scripts/project_SVs_no-imp.sh
-
-
-
-for cross in $(ls -d B73x*); do
-  # convert to hapmap diploid
-  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -export ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -exportType HapmapDiploid
-done
-
-
-
-#### QC projection
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-Rscript ~/projects/sv_nams/scripts/count_projected_SVs.R ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt ~/projects/sv_nams/analysis/projection_no-imp_corrected
-
-for cross in $(ls -d B73x*); do
-  # ugly way to get the names of rils used to plot karyotype before imputation
-  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/before_imputation_best-markers/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
-  # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_SVs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/SV_projection_no-imp_corrected ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt --rils=$rils
-done
-
-
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx6g -importGuess ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.$cross.not-imputed.best-markers.projected.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs_$cross\_OverallSummary
-  (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/projection_no-imp_corrected/missing_data_after_SV-projection_not-imputed_best-markers.txt
-done
-
-```
-
-
-## Put back SNPs that were filtered out into hapmap of each population
-
-`add_monomorphic_SVs.R`
-
-
-
-##### Filter ONLY SVs:
+* Use TASSEL 5 to fix allele columns for each cross
+* Use TASSEL 5 to fix allele columns for big file with all crosses
 
 ```bash
+cd ~/projects/sv_nams/analysis/projection
+
+# make sure files are sorted and let TASSEL correct the alleles' column
+for file in NAM_rils_projected-SVs-only.B73x*; do
+  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile $file -outputFile $file -fileType Hapmap
+  run_pipeline.pl -Xmx10g -importGuess $file -export $file -exportType HapmapDiploid
+done
+
 # make sure it's sorted and let TASSEL correct the alleles' column
-run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs.hmp.txt -outputFile ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs.hmp.txt -fileType Hapmap
-run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs.hmp.txt -export ~/projects/sv_nams/analysis/projection_no-imp_corrected/NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs.hmp.txt -exportType HapmapDiploid
-
-cp NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs.hmp.txt NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs_v2.hmp.txt
-
+run_pipeline.pl -Xmx10g \
+                -SortGenotypeFilePlugin \
+                -inputFile ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.hmp.txt \
+                -outputFile ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt \
+                -fileType Hapmap
+run_pipeline.pl -Xmx10g \
+                -importGuess ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt \
+                -export ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt \
+                -exportType HapmapDiploid
 ```
 
-
-Upload data to Cyverse
+## Upload data to Cyverse
 
 ```bash
 # go to data folder of the project
-cd ~/projects/sv_nams/data
+cd ~/projects/sv_nams/analysis/projection
 
 # log in to cyverse
 iinit
@@ -785,7 +624,7 @@ icd /iplant/home/shared/NAM/Misc
 # check if files match what Arun described
 ils
 # upload data
-iput -K NAM_rils_SVs-SNPs.all-crosses.only-projected.SVs_v2.hmp.txt
+iput -K NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
 # exit iRods
 iexit full
 ```
