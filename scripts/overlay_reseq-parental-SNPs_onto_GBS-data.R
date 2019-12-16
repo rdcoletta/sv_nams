@@ -84,6 +84,8 @@ for (chr in unique(gbs.data[, "chrom"])) {
   reseq.data.chr <- fread(reseq.file.chr, header = TRUE, data.table = FALSE)
   reseq.data.chr <- reseq.data.chr[which(reseq.data.chr[, "chrom"] == chr), ]
   reseq.data.chr <- reseq.data.chr[which(reseq.data.chr[, "pos"] %in% gbs.parents.chr[, "pos"]), ]
+  # also make sure that gbs data has the snps as reseq now
+  gbs.parents.chr <- gbs.parents.chr[which(gbs.parents.chr[, "pos"] %in% reseq.data.chr[, "pos"]), ]
   
   # filter reseq data to have only the parents of cross being analyzed
   # make sure they are all uppercase
