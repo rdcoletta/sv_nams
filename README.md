@@ -469,6 +469,9 @@ done
 
 ## Projection
 
+All the projections of parental SVs into RILs will be done for each NAM population separately using the FILLIN plugin from TASSEL 5. In short, this program generate haplotypes for each parent of a cross (`-FILLINFindHaplotypesPlugin`), and then it imputes missing data in the RILs (i.e. SVs) using those parental haplotypes (`-FILLINImputationPlugin`).
+
+But, before that, I need to make sure the files are sorted:
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
@@ -485,47 +488,41 @@ for cross in $(ls -d B73x*); do
   run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -export ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -exportType HapmapDiploid
 done
 
-# just number of rows
+# make sure number of rows of parental and RIL data matches in each population
 for cross in $(ls -d B73x*); do
   wc -l ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt
   wc -l ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt
 done
+```
 
+After some preliminary tests, I found that using a haplotype block size of 2,000 sites (`-hapSize 2000`) gives the best projection rate without compromising accuracy too much. Also, since I'm creating haplotypes for each parent individually, I need to set the minimum number of taxa to create a haplotype to 1 (`-minTaxa 1`). Importantly, the option `-hybNN` should be turned to `false`, otherwise the algorithm will combine haplotypes in recombination breakpoints if it thinks that region is heterozygous. If this option is not turned off, some projected regions will be messy and can end up with more than two alleles. It it's off, nothing is projected for that region.
 
-
+```bash
 # create new folder
 mkdir ~/projects/sv_nams/analysis/projection
 
-# create command files
+# create haplotypes from parents
 for cross in $(ls -d B73x*); do
-  # create haplotypes from parents
-  echo "run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/projection/donors_$cross -hapSize 2000 -minTaxa 1"
-done > ~/projects/sv_nams/scripts/commands_for_create_haplotypes_for_projection.txt
+  run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/projection/donors_$cross -hapSize 2000 -minTaxa 1
+done
 
+# impute ril genotypes based on parental haplotypes
 for cross in $(ls -d B73x*); do
-  # impute ril genotypes based on
-  echo "run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/projection/donors_$cross -o ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -hapSize 2000 -accuracy -hybNN false"
-done > ~/projects/sv_nams/scripts/commands_for_project_SVs.txt
+  run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/projection/donors_$cross -o ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -hapSize 2000 -accuracy -hybNN false
+done
 
-parallel --jobs 3 < ~/projects/sv_nams/scripts/commands_for_create_haplotypes_for_projection.txt
-parallel --jobs 3 < ~/projects/sv_nams/scripts/commands_for_project_SVs.txt
-
-
+# convert projected hapmap to diploid format
 for cross in $(ls -d B73x*); do
-  # convert to hapmap diploid
   run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -export ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -exportType HapmapDiploid
 done
 ```
 
-
-QC projection:
-* Count SVs with `count_projected_SVs.R`
-
+After projection, I wrote `scripts/count_projected_SVs.R` to compute how many SVs were projected per population and make summary plots about projections. I also wrote `scripts/plot_ril_karyotypes_SVs.R` to plot karyotypes of few RILs showing from which parent the SVs come from. The RILs selected were the same ones previously used to plot karyotypes of raw GBS data and best selected SNP markers.
 
 ```bash
-#### QC projection
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
+# calculate amount of projected SVs
 Rscript ~/projects/sv_nams/scripts/count_projected_SVs.R ~/projects/sv_nams/data ~/projects/sv_nams/analysis/projection
 
 # plot karyotypes of SVs present in each parent of a cross
@@ -541,13 +538,15 @@ for cross in $(ls -d B73x*); do
   Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_SVs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/projection ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt --rils=$rils --expected-SVs=FALSE
 done
 
-
+# additional QC about missing data
 for cross in $(ls -d B73x*); do
   run_pipeline.pl -Xmx6g -importGuess ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs_$cross\_OverallSummary
   (echo $cross && grep "Proportion Missing" ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs_$cross\_OverallSummary1.txt) | tr "\n" "\t" | paste -s -d "\t" >> ~/projects/sv_nams/analysis/projection/missing_data_best-markers_after_SV-projection.txt
 done
-
+# average missing data 0.09
 ```
+
+The average percentage of projected SVs across all populations was **87%** (~84k SVs) with average accuracy of **93%**. The amount projected was a bit higher (89%) if considering only polymorphic SVs between the two parents of a cross. Only four crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xP39, and B73xTzi8).
 
 
 
