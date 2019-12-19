@@ -552,21 +552,21 @@ The average percentage of projected SVs across all populations was **87%** (~84k
 
 ## Merge all projected SVs of each population in one file
 
-`scripts/merge_SVs_after_projection.R`
-
-* Use TASSEL 5 to fix allele columns for each cross
-* Use TASSEL 5 to fix allele columns for big file with all crosses
+The final file that will be sent to Jianming's group for GWAS will be a hapmap file **only with SVs** with all RILs of all NAM populations. I wrote `scripts/merge_SVs_after_projection.R` to filter and merge all SVs in one file. After combining multiple files, I have to correct the `alleles` column on the final hapmap to make sure that all possible alleles are represented in that column.
 
 ```bash
 cd ~/projects/sv_nams/analysis/projection
 
-# make sure files are sorted and let TASSEL correct the alleles' column
+# make sure files are sorted
 for file in NAM_rils_projected-SVs-only.B73x*; do
   run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile $file -outputFile $file -fileType Hapmap
   run_pipeline.pl -Xmx10g -importGuess $file -export $file -exportType HapmapDiploid
 done
 
-# make sure it's sorted and let TASSEL correct the alleles' column
+# merge hapmaps
+Rscript ~/projects/sv_nams/scripts/merge_SVs_after_projection.R
+
+# make sure final file is sorted and let TASSEL correct the alleles' column
 run_pipeline.pl -Xmx10g \
                 -SortGenotypeFilePlugin \
                 -inputFile ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.hmp.txt \
@@ -578,7 +578,11 @@ run_pipeline.pl -Xmx10g \
                 -exportType HapmapDiploid
 ```
 
-## Upload data to Cyverse
+
+
+## Upload final hapmap to Cyverse
+
+Lastly, I uploaded the final hapmap file `~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt` to the shared folder on Cyverse.
 
 ```bash
 # go to data folder of the project
