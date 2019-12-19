@@ -358,7 +358,7 @@ wc -l B73x*/*.not-imputed.best-markers.hmp.txt
 # range from 13k to 50k
 ```
 
-In summary, from initial ~2.7 million SNPs for each population (after collapsing duplicated markers), ~1 million SNPs were present in the parental resequecing data, and the number of best SNPs selected varied from ~13k to ~50k depending on the population (mean of ~32k SNPs and median of ~31k).
+**In summary**, from initial ~2.7 million SNPs for each population (after collapsing duplicated markers), ~1 million SNPs were present in the parental resequecing data, and the number of best SNPs selected varied from ~13k to ~50k depending on the population (mean of ~32k SNPs and median of ~31k).
 
 > Note: The reason why there is `not-imputed` in the filename is because during preliminary tests I tried to impute GBS SNPs using FSFHap from TASSEL to decrease the number of missing data. But after selecting the best markers, I found the imputing SNPs didn't reduce much the missing data and it was actually causing some troubles later during SV projection. So we decided not to impute SNPs at this stage.
 
@@ -443,13 +443,7 @@ done
 
 ## Merge SNPs with SVs
 
-<mark>Write paragraph about this topic</mark>
-* Merge SVs and SNPs in one file for projection (one for parents and other for RILs)
-* Looks like B73Ab (the negative control for calling SVs for B73) has a lot of missing data. This will be problematic when plotting karyotypes or projection:
-  - B73 should not have any SV because all SVs were called against B73 ref genome
-  - B73Ab10 was used as a negative control, but there is a lot of missing data
-  - Thus I had to convert "NN" to "AA" from B73Ab10 calls, and left all non-missing calls as they were called
-
+Now that I have selected which SNPs will be used to anchor projections, it's time to merge this SNP data with the SV calls into the same file for each population. I wrote `scripts/merge_SVs_and_SNPs.R` to do this task, and it generates a hapmap for the two parents of a cross (both SNP and SV calls come from resequecing), and another hapmap with the RILs of that cross (SNP calls come from GBS, and SV calls were set to `NN` since that's what will be projected later).
 
 ```bash
 module load R/3.6.0
@@ -468,42 +462,7 @@ for cross in $(ls -d B73x*); do
 done
 ```
 
-
-
-
-
-Quick summary:
-
-
-```bash
-# cd ~/projects/sv_nams/data/GBS-output/tmp/
-#
-# cross="B73xB97"
-#
-# # reseq svs
-# cut -f 1,2,3,4,5,6,7,8,9,10,11,12,14 ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt > $cross/$cross\_parents_SVs.hmp.txt
-# run_pipeline.pl -Xmx6g -importGuess $cross/$cross\_parents_SVs.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_reseq-parents_SVs_$cross\_OverallSummary
-# grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_reseq-parents_SVs_$cross\_OverallSummary1.txt
-#
-# # gbs parents
-# run_pipeline.pl -Xmx6g -importGuess $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_gbs-parents_SNPs_$cross\_OverallSummary
-# grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_gbs-parents_SNPs_$cross\_OverallSummary1.txt
-#
-# # gbs rils before fsfhap
-# run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_before-FSFHap_$cross\_OverallSummary
-# grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_before-FSFHap_$cross\_OverallSummary1.txt
-#
-# # gbs rils after fsfhap
-# run_pipeline.pl -Xmx6g -importGuess $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.correct-marker-names.hmp.txt -GenotypeSummaryPlugin -endPlugin -export ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_OverallSummary
-# grep "Proportion Missing" ~/projects/sv_nams/analysis/qc/NAM_rils_SNPs_after-FSFHap_$cross\_OverallSummary1.txt
-#
-#
-# wc -l ~/projects/sv_nams/data/NAM_founders_SVs.hmp.txt
-# wc -l $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt
-# wc -l $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt
-# wc -l $cross/NAM_rils_SNPs.$cross.not-in-SVs.FSFHap-imputed.correct-marker-names.hmp.txt
-```
-
+> Note: the B73 parent should not have any SV present, because all SVs were called against the B73 reference genome. However, since in practice there might be some miscalls, Arun used B73Ab10 as a negative control. However, this parent has a lot of missing data. This missing data can be problematic for projection. Since it's expected that B73Ab10 has very few SVs, I converted all `NN` into `AA` and left all non-missing calls as they were.
 
 
 
@@ -642,7 +601,7 @@ iexit full
 
 
 
-## Panzea SNPs
+# Panzea SNPs
 
 Plot karyotypes: p1, p2 and hets for each of the 3 RILs used as example in previous steps.
 
