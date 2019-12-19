@@ -606,24 +606,35 @@ iexit full
 
 # Panzea SNPs
 
-Plot karyotypes: p1, p2 and hets for each of the 3 RILs used as example in previous steps.
-
-Downloaded `NAM_map_and_genos-120731.zip` at <http://cbsusrv04.tc.cornell.edu/users/panzea/download.aspx?filegroupid=8>. Unziped at `data/NAM_SNPchip`.
-
-<mark>TO DO:</mark>:
-* Use `wget` with the link to download directly to MSI and do the below analysis there.
-
-Merge chromosome files into one hapmap and convert to diploid format using tassel:
+As an additional QC step, we wanted to make sure that the SNPs that were not missing in the GBS data were correct calls. To do that, I downloaded the SNP calls done by SNP chip for all NAM populations (available at [Panzea](https://www.panzea.org/genotypes) >> Legacy SNPs >> `NAM_map_and_genos-120731.zip`), plotted their karyotypes and compared to the ones plotted for the raw GBS data and the best markers.
 
 ```bash
+cd ~/projects/sv_nams/data
 
-cd ~/OneDrive/University\ of\ Minnesota/PhD/hirsch_lab/projects/sv_nams/data/NAM_SNPchip/hapmap
+# download dataset
+wget http://de.iplantcollaborative.org/dl/d/B323A70C-F0D8-4BEF-9707-FD8198B5251C/NAM_map_and_genos-120731.zip
+unzip NAM_map_and_genos-120731.zip
+
+# merge hapmaps of chromosomes into one file
+cd NAM_map_and_genos-121025/hapmap/
 
 cat NAM_SNP_genos_raw_20090921_chr1.hmp > NAM_SNP_genos_raw_20090921.hmp.txt
 for chr in chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10; do
   sed 1d NAM_SNP_genos_raw_20090921_$chr.hmp >> NAM_SNP_genos_raw_20090921.hmp.txt
 done
 
+# convert hapmap to diploid format
 run_pipeline.pl -Xmx1g -importGuess NAM_SNP_genos_raw_20090921.hmp.txt -export NAM_SNP_genos_raw_20090921.hmp.txt -exportType HapmapDiploid
 
+# create karyotypes
+cd ~/projects/sv_nams/data/GBS-output/tmp/
+
+for cross in $(ls -d B73x*); do
+  # ugly way to get the names of rils used to plot karyotypes
+  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/raw-gbs/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
+  # plot karyotypes for those rils
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotype_SNPchip.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/SNP_chip ~/projects/sv_nams/data/NAM_map_and_genos-121025/hapmap/NAM_SNP_genos_raw_20090921.hmp.txt --rils=$rils
+done
 ```
+
+The karyotypes from GBS and SNP chip data agree very well, which gives us more confidence that the **GBS calls are correct**.
