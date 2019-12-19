@@ -312,13 +312,17 @@ for cross in $(ls -d B73x*); do
     sed 1d $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.collapsed.hmp.txt >> $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt
   done
 done
+
+# check number of SNPs per pop
+wc -l B73*/*not-in-SVs.not-imputed.hmp.txt
+# ~2.7M (with slightly different number per population)
 ```
 
 
 
 ### Overlaying resequencing data into parental GBS data
 
-The NAM parents were genotyped by both resequencing and GBS. Thus, it is possible that some SNP calls disagree between the two methods. To remove such SNPs, I overlayed the resequencing data into the GBS data and turned a SNP call into `NN` if there was a disagreement using `scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R`. This script produces a hapmap for each cross containing only the parental data for that cross.
+The NAM parents were genotyped by both resequencing and GBS. Thus, it is possible that some SNP calls disagree between the two methods. To remove such SNPs, I overlayed the resequencing data into the GBS data and turned a SNP call into `NN` if there was a disagreement using `scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R`. This script produces a hapmap for each cross containing **only the parental** data for that cross.
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
@@ -354,7 +358,7 @@ wc -l B73x*/*.not-imputed.best-markers.hmp.txt
 # range from 13k to 50k
 ```
 
-From ~1 million SNPs for each population, the number of best SNPs selected varied from ~13k to ~50k depending on the population (mean of ~32k SNPs and median of ~31k).
+In summary, from initial ~2.7 million SNPs for each population (after collapsing duplicated markers), ~1 million SNPs were present in the parental resequecing data, and the number of best SNPs selected varied from ~13k to ~50k depending on the population (mean of ~32k SNPs and median of ~31k).
 
 > Note: The reason why there is `not-imputed` in the filename is because during preliminary tests I tried to impute GBS SNPs using FSFHap from TASSEL to decrease the number of missing data. But after selecting the best markers, I found the imputing SNPs didn't reduce much the missing data and it was actually causing some troubles later during SV projection. So we decided not to impute SNPs at this stage.
 
@@ -368,7 +372,7 @@ I wrote `scripts/summary_raw_gbs.R` to plot some basic statistics of the raw GBS
 
 | Average number SNPs | Average missing data | Average polymorphic |
 | ------------------- | -------------------- | ------------------- |
-|                     |                      |                     |
+| 2,730,043           | 85.48%               | 29.32%              |
 
 ```bash
 cd ~/projects/sv_nams/
@@ -402,6 +406,10 @@ done
 **After filtering**
 
 When I filtered the raw gbs, `scripts/select_best_SNPs_per_pop.R` already produces some summary data. Thus, I just needed to generate the karyotypes for the same RILs used before filtering.
+
+| Average number SNPs | Average missing data | Average polymorphic |
+| ------------------- | -------------------- | ------------------- |
+| 32,190              | 21.88%               | 100%                |
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
