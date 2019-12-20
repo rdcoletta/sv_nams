@@ -74,7 +74,7 @@ After downloading and decompressing the files, these are the data that I will be
 
 I transformed VCF files to hapmap files before any kind of analysis because they are much smaller, easier to parse and quicker to analyze. Additionally, hapmap format would be used for projections anyways. The software [TASSEL 5](https://www.maizegenetics.net/tassel) can do this relatively fast with SNPs. However, a small complication arises when doing that for structural variants, since hapmap files were originally designed to store genotypic information as nucleotides. The way we got around that was writing a custom script (`scripts/vcf2hapmap.py`) to consider each SV as binary data (i.e. either present or not present) and code them as "nucleotides". Thus, if a SV is `A`bsent in a genotype, it was coded as `AA`, but if the SV is `T`here, it was coded as `TT`.
 
-Converting SNPs from original VCF to hapmap would a take lot of time using TASSEl because the file is ~23 Gb. Therefore, I performed a series of UNIX commands to split the VCF into chromosomes and scaffolds abd transform each of them into hapmap format. These `.hmp.txt` files will be used to filter out SNPs within SVs, and only then it will be merged back into a single hapmap file (the intermediate files will be deleted).
+Converting SNPs from original VCF to hapmap would a take lot of time using TASSEl because the file is ~23 Gb. Therefore, I performed a series of UNIX commands to split the VCF into chromosomes and scaffolds abd transform each of them into hapmap format.
 
 
 ```bash
@@ -134,9 +134,9 @@ Additional information about the SV is displayed on its ID, since hapmap format 
 Importantly, any SV called as heterozygous in the VCF file (i.e. `0/1`) was considered as **not** having a SV, therefore they were coded as `AA`.
 
 
-### Remove SNPs that are within the boundaries of a SV
+### Identifying SNPs that are within the boundaries of a SV
 
-SNPs that are found inside deletions are problematic, because they will have segregation issues when you compare multiple lines that have or not that SV. Thus, I wrote `scripts/generate_SV_bed.py` to create a BED file with start and end positions of deletions smaller than 100kb, and then filter out SNPs that fall within those boundaries using TASSEL's `-FilterSiteBuilderPlugin`. I set up a 100 kb threshold because there were some extremely large deletions (>100 Mb) that would make me remove nearly all SNPs in this step and more than ~95% of the deletions were within that range.
+SNPs that are found inside deletions are problematic, because they will have segregation issues when you compare multiple lines that have or not that SV. Thus, I wrote `scripts/generate_SV_bed.py` to create a BED file with start and end positions of deletions smaller than 100kb. I set up a 100 kb threshold because there were some extremely large deletions (>100 Mb) that would make me remove nearly all SNPs in this step and more than ~95% of the deletions were within that range. Importantly, each NAM population will be filtered separately.
 
 > Translocations can cause SNP segregation issues as well. However, dealing with translocations is even more complicated, especially for SV projection and downstream GWAS, and we will ignore them here.
 
@@ -175,9 +175,9 @@ mv data/tmp/SNPs_to_remove_B73xOh7b.bed data/tmp/SNPs_to_remove_B73xOh7B.bed
 
 ## GBS data
 
-### Creating hapmap files for each NAM population
+### Creating hapmap files for each NAM population and removing SNPs within SVs
 
-After removing SNPs within SVs from parental data, I had to make sure the GBS data with genotypic data on RILs had the same SNPs as the parents. However, GBS files are very very large, and parsing it would take way too much time. Thus, I split the vcf file with GBS data by chromosome and transformed each file into the hapmap format:
+The GBS file in VCF format contains information about millions of SNPs in all NAM lines (+5000), making it a very large file. Parsing it as it is would take way too much time. Thus, before doing any filtering, I split the VCF file by chromosome so I can run the filtering process for each chromosome in parallel.
 
 ```bash
 # go to project folder
@@ -413,7 +413,7 @@ done
 # done
 ```
 
-Finally, I wrote `scripts/correct_SNP-names_rils.R` to make sure SNPs from RILs have the same name as the ones from parents.
+Finally, I wrote `scripts/correct_SNP-names_rils.R` to make sure SNPs from RILs have the same name as the ones from parents. This script will generate the file `NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.correct-marker-names.hmp.txt`, which will be used later when merging SNPs with SVs.
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
@@ -422,7 +422,6 @@ for cross in $(ls -d B73x*); do
   Rscript ~/projects/sv_nams/scripts/correct_SNP-names_rils.R $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.best-markers.hmp.txt
 done
 ```
-
 
 
 ## Merge SNPs with SVs
