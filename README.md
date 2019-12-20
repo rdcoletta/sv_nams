@@ -2,7 +2,7 @@
 
 by Rafael Della Coletta and Candice Hirsch (September-December, 2019)
 
-> The goal of this analysis is to project structural variants (SVs) indentified for the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines.
+> The goal of this analysis is to project structural variants (SVs) indentified in the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines.
 
 
 
@@ -55,32 +55,16 @@ After downloading and decompressing the files, these are the data that I will be
 
 
 
-## Methodology overview
-
-
-<mark>ADJUST THIS!</mark>
-
-1. Transform VCF files into Hapmap format
-2. Remove snps in SV before dividing into populations
-2. Separate file by pop
-3. Percent missing/het data for each population
-4. Karyotype to see distribution of markers (SNPs, SVs, SNPs + SVs)
-4. Allele frequency distribution for each ril pop
-
-
 ## Requirements
 
+| Software | Version | Additional libraries / modules                                                         |
+| -------- | ------- | -------------------------------------------------------------------------------------- |
+| R        | 3.6.0   | `data.table (v1.12.4)`, `ggplot2 (v3.2.0)`, `foreach (v1.4.7)`, `doParallel (v1.0.15)` |
+| Python   | 3.6.6   | `argparse (v1.1)`, `pandas (v0.23.4)`, `natsort (v6.0.0)`                              |
+| TASSEL   | 5.2.56  | -                                                                                      |
+| vcftools | 0.1.17  | -                                                                                      |
 
-<mark>ADJUST THIS! AND ADD VERSIONS OF R PACKAGES</mark>
-
-| Software | Version | Libraries / Packages / Plugins |
-| -------- | ------- | ------------------------------ |
-| R        | 3.6     | `data.table`, `ggplot2`        |
-| Python   |         | `argparse`, `pandas`           |
-| TASSEL   | 5       |                                |
-| vcftools |         |                                |
-
-> Note: most of the bash `for` loops below can all be parallelized for better perfomance. I'm still learning the best way to do it, so I will just show a sequential way of doing that, and you can parallelize the way you think it's best.
+> Note: most of the bash `for` loops below can all be parallelized for better perfomance using [GNU parallel](https://www.gnu.org/software/parallel/). I'm show a sequential way of doing that because it's easier to understand.
 
 
 
@@ -603,6 +587,7 @@ iexit full
 
 
 
+---
 
 # Panzea SNPs
 
@@ -638,3 +623,5 @@ done
 ```
 
 The karyotypes from GBS and SNP chip data agree very well, which gives us more confidence that the **GBS calls are correct**.
+
+---
