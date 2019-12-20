@@ -74,7 +74,7 @@ After downloading and decompressing the files, these are the data that I will be
 
 I transformed VCF files to hapmap files before any kind of analysis because they are much smaller, easier to parse and quicker to analyze. Additionally, hapmap format would be used for projections anyways. The software [TASSEL 5](https://www.maizegenetics.net/tassel) can do this relatively fast with SNPs. However, a small complication arises when doing that for structural variants, since hapmap files were originally designed to store genotypic information as nucleotides. The way we got around that was writing a custom script (`scripts/vcf2hapmap.py`) to consider each SV as binary data (i.e. either present or not present) and code them as "nucleotides". Thus, if a SV is `A`bsent in a genotype, it was coded as `AA`, but if the SV is `T`here, it was coded as `TT`.
 
-Converting SNPs from original VCF to hapmap would a take lot of time using TASSEl because the file is ~23 Gb. Therefore, I performed a series of UNIX commands to split the VCF into chromosomes and scaffolds abd transform each of them into hapmap format.
+Converting SNPs from original VCF to hapmap would a take lot of time using TASSEl because the file is ~23 Gb. Therefore, I performed a series of UNIX commands to split the VCF into chromosomes and scaffolds and transform each of them into hapmap format.
 
 
 ```bash
@@ -166,10 +166,6 @@ mv data/NAM_founders_SVs_B73xOh7b.hmp.txt data/NAM_founders_SVs_B73xOh7B.hmp.txt
 mv data/tmp/SNPs_to_remove_B73xHP301.bed data/tmp/SNPs_to_remove_B73xHp301.bed
 mv data/tmp/SNPs_to_remove_B73xIL14H.bed data/tmp/SNPs_to_remove_B73xIl14H.bed
 mv data/tmp/SNPs_to_remove_B73xOh7b.bed data/tmp/SNPs_to_remove_B73xOh7B.bed
-
-# # remove intermediate files
-# rm data/tmp/*
-# rmdir data/tmp/
 ```
 
 
@@ -193,7 +189,7 @@ for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
   awk '{if(/^#/)print;else exit}' data/GBS-output/populations.snps.vcf > data/GBS-output/tmp/NAM_rils_SNPs.$chr.vcf
 done
 
-# split vcf file by chromosome using parallel
+# split vcf file by chromosome
 for i in {1..10}; do
   grep -w '^chr$i' data/GBS-output/populations.snps.vcf >> data/GBS-output/tmp/NAM_rils_SNPs.chr$i.vcf
 done
@@ -224,7 +220,7 @@ for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
       cross=$(echo $line | cut -f 1)
       # check if directory exists; if it doesnt, create one to store results
       [[ -d data/GBS-output/tmp/$cross ]] || mkdir -p data/GBS-output/tmp/$cross
-      # transform line of the file into multiploe lines so that vcftools recognize 1 genotype to keep per line
+      # transform line of the file into multiple lines so that vcftools recognize 1 genotype to keep per line
       echo $line |  tr "\t" "\n" | tr "," "\n" > data/GBS-output/tmp/$cross/genotypes_to_keep.txt
       # use vcftools to filter a vcf file
       vcftools --vcf data/GBS-output/tmp/NAM_rils_SNPs.$chr.vcf \
@@ -306,7 +302,7 @@ wc -l B73*/*not-in-SVs.not-imputed.hmp.txt
 
 ### Overlaying resequencing data into parental GBS data
 
-The NAM parents were genotyped by both resequencing and GBS. Thus, it is possible that some SNP calls disagree between the two methods. To remove such SNPs, I overlayed the resequencing data into the GBS data and turned a SNP call into `NN` if there was a disagreement using `scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R`. This script produces a hapmap for each cross containing **only the parental** data for that cross.
+The NAM parents were genotyped by both resequencing and GBS. Thus, it is possible that some SNP calls disagree between the two methods. To remove such SNPs, I overlayed the resequencing data into the GBS data and turned a SNP call into `NN` if there was a disagreement using `scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R`. This script produces a hapmap for each cross containing **only the parental** data for that cross. Also, note that a number of SNPs in GBS data are not represented in the resequecing data, which can decrease even more the number of SNPs used for projection.
 
 ```bash
 cd ~/projects/sv_nams/data/GBS-output/tmp/
@@ -326,7 +322,7 @@ wc -l B73*/*not-in-SVs.reseq-overlay.hmp.txt
 
 ### Select best GBS markers
 
-GBS data contain a lot of missing data and also a lot of redundant information (many SNPs tightly linked). Besides increasing computation time with such big dataset, I also found in my preliminary analysis that using this raw GBS data had a strong negative impact on projections. Thus, we decided to filter this dataset by selecting only polymorphic SNPs, SNPs present in at least 30% of RILs, using a sliding window approach to remove incorrect calls (see Huang et al, Genome Research, 2009) and removing SNPs with allele frequency < 0.4 or > 0.6. To do that, I ran `scripts/select_best_SNPs_per_pop.R`.
+GBS data contain a lot of missing data and also a lot of redundant information (many SNPs tightly linked). Besides increasing computation time with such big dataset, I also found in my preliminary analysis that using this raw GBS data had a strong negative impact on projections. Thus, we decided to filter this dataset by selecting only polymorphic SNPs, SNPs present in at least 30% of RILs, using a sliding window approach to remove incorrect calls (see [Huang et al, Genome Research, 2009](https://genome.cshlp.org/content/19/6/1068.abstract)) and removing SNPs with allele frequency < 0.4 or > 0.6. To do that, I ran `scripts/select_best_SNPs_per_pop.R`.
 
 ```bash
 # go to data folder
