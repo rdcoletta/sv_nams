@@ -8,3 +8,5 @@ analysis/*
 tests_README.md
 notes/*
 tests/*
+!analysis/qc/centromeres_Schneider-2016-pnas_v4.bed
+!analysis/qc/B73_RefGen_V4_chrm_info.txt
