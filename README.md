@@ -620,9 +620,9 @@ Rscript scripts/remove_duplicated_SVs.R data/NAM_founders_SVs.hmp.txt analysis/p
 The NAM RILs have a high amount of missing SNPs because they were called from GBS data. Since the whole genome resequencing data for the NAM parents include ~27 million SNPs, we also decided to project these SNPs into RILs in a similar manner as described above for SVs.
 
 
-## Removing parental SNPs within SVs for each family
+## Remove parental SNPs within SVs for each family
 
-I previously removed SNPs within SVs for the RIL data. Now I need to also remove SNPs within SVs in the parental resequencing data (`data/tmp/NAM_founders_SNPs.vcf`) separately for each NAM family, since these are the SNPs that will be projected.
+I previously removed SNPs within SVs for the RIL data. Now I need to also remove SNPs within the boundaries of deletions up to 100kb in the parental resequencing data (`data/tmp/NAM_founders_SNPs.vcf`) separately for each NAM family, since these are the SNPs that will be projected.
 
 ```bash
 # go to project folder
@@ -687,4 +687,80 @@ done > ~/projects/sv_nams/scripts/commands_vc2hmp_reseq.txt
 module load parallel
 parallel --jobs 5 < ~/projects/sv_nams/scripts/commands_sort_vcf_reseq.txt
 parallel --jobs 5 < ~/projects/sv_nams/scripts/commands_vc2hmp_reseq.txt
+```
+
+
+
+## Prepare datasets for projection
+
+Before projections, I will keep only the polymorphic parental SNPs for each NAM family to reduce computational time during projections (since they are the only informative SNPs anyways). Since I will use the best GBS markers + projected SVs from previous analysis as anchors for projections, the donor datasets will have these markers and the polymorphic resequencing SNPs from the parents. On the other hand, the RIL datasets will have the same anchor markers, but all polymorphic resequencing SNPs from parents will be set to missing data (`NN`).
+
+
+```bash
+# get only polymorphic snps
+cd ~/projects/sv_nams/data/tmp/
+for cross in $(ls -d B73x*); do
+  Rscript ~/projects/sv_nams/scripts/keep_poly_reseq-snps_only.R $cross ~/projects/sv_nams/data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs.hmp.txt
+done
+
+# merge svs
+cd ~/projects/sv_nams/data/tmp/
+for cross in $(ls -d B73x*); do
+  echo "Rscript ~/projects/sv_nams/scripts/merge_SNPs-reseq_and_SNPs-SVs.R ~/projects/sv_nams/data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.poly.not-in-SVs.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt ~/projects/sv_nams/data/tmp/$cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.not-projected.hmp.txt"
+done > ~/projects/sv_nams/scripts/commands_merge-reseq-SNPs.txt
+
+module load parallel
+parallel --jobs 3 < ~/projects/sv_nams/scripts/commands_merge-reseq-SNPs.txt
+```
+
+In order to speed up analysis, I will break the datasets into chromosomes so I can run more things in parallel:
+
+```bash
+# break parental data into chromosomes
+for cross in $(ls -d B73x*); do
+  for chr in {1..10}; do
+    head -n 1 ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt > ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.hmp.txt
+    awk -v chr="$chr" '$3 == chr' ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt >> ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.hmp.txt
+  done
+done
+
+for cross in $(ls -d B73x*); do
+  head -n 1 ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt > ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-scaffs.hmp.txt
+  grep -P "\tSCAF_" ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt >> ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-scaffs.hmp.txt
+done
+
+# # merge chromosomes
+# cd ~/projects/sv_nams/data/tmp/
+# cat B73xB97/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.chr-1.not-projected.hmp.txt > ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.not-projected.hmp.txt
+# for chr in 2 3 4 5 6 7 8 9 10 scaffs; do
+#   sed 1d B73xB97/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.chr-$chr.not-projected.hmp.txt >> ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.not-projected.hmp.txt
+# done
+
+# # merge chromosomes
+# cd ~/projects/sv_nams/data/tmp/
+# for cross in $(ls -d B73x*); do
+#   cat $cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.chr-1.not-projected.hmp.txt > ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.not-projected.hmp.txt
+#   for chr in 2 3 4 5 6 7 8 9 10 scaffs; do
+#     sed 1d $cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.chr-$chr.not-projected.hmp.txt >> ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.not-projected.hmp.txt
+#   done
+# done
+
+
+# write the script below
+
+#### make sure parents and rils have the same markers ----
+
+# first read parent and merged rils
+
+# cat("Making sure parents and rils have the same SNPs\n")
+# parents.merged.filtered <- parents.merged[which(parents.merged[, 1] %in% rils.merged[, 1]), ]
+# fwrite(parents.merged.filtered, output.parents, quote = FALSE, sep = "\t", na = NA, row.names = FALSE)
+# cat("Done!\n\n")
+
+
+# # check that parents and rils have the same number of markers
+# for cross in $(ls -d B73x*); do
+#   wc -l ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt
+#   wc -l ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.hmp.txt
+# done
 ```
