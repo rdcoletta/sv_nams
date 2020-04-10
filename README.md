@@ -994,3 +994,36 @@ iput -K NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v5.hmp.txt
 # exit iRods
 iexit full
 ```
+
+
+
+# Subsampling SNPs for GWAS
+
+We want to understand whether or not SVs can capture phenotypic variation not explained by SNPs alone in GWAS, but since there are much more SNPs than SVs in our dataset, it would be an unfair comparison to run GWAS only with either type of marker. In addition, given the high density of SNPs, the level of LD between SNPs and SVs can lead to a biased result. Thus, we want to subsample SNPs according to their level of LD to SVs and also match the total number of SVs.
+
+
+## LD calculation
+
+First thing to do is to calculate LD between SNPs and SVs, because it will take some time given the amount of RILs and markers in the NAM dataset. I will use Plink v1.9 for that, and will only calculate LD between markers that are in a 100kb window. Then I will filter the output to have only LD between non-translocation SVs and SNPs.
+
+```bash
+# transform files from hapmap to plk format
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+mkdir ld
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/hmp2plk.sh
+done
+
+# calculate LD with ld-window 1M variants and ld-window-kb 100kb
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/plink_ld_snps-svs_100kb-window.sh
+done
+
+# remove translocations, and keep only SNPs and SVs LD
+cd /scratch.global/della028/hirsch_lab/ld_files
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/plink_only_snp-sv-ld.sh
+done
+```
+
+> For LD calculations, set up the `--ld-window` to the same number as your `--ld-window-kb`. The former option looks at a window depending on the number of variants, while the latter looks at physical distance (in kb). This is important, because say you have 1000 variants in a 10 kb window. If you set the options `--ld-window 100` and `--ld-window-kb 10`, it will stop calculating LD after it looks at the first 100 variants (so you don’t cover the whole 10kb window). Also `--make-founders` will calculate ld among all your lines in your dataset. Also set `--ld-window-r2 0` to make sure plink reports r2 value of zero or more (the default is 0.2).
