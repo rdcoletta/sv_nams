@@ -13,7 +13,7 @@ import argparse as ap
 parser = ap.ArgumentParser(formatter_class=ap.RawDescriptionHelpFormatter,
                            description='''
 description: this script reads a VCF file containing structural variant calls,
-             and transform it into a numeric hapmap file.
+             and transform it into a hapmap file.
 
 example: vcf2hapmap.py my_file.vcf my_results.sorted.hmp.txt''')
 # add positional arguments

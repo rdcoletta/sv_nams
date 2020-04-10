@@ -52,6 +52,7 @@ After downloading and decompressing the files, these are the data that I will be
 * `B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf`: file with SNP calls for NAM founders.
 * `GBS-output/populations.snps.vcf`: file with SNP calls (GBS) for all NAM lines.
 
+**UPDATE:** on February 5th, Arun sent me the newest version of the SV calls via Slack. This version corrects the high amount of missing data called on previous versions. The filename is `data/NAM-structural-variations-v3.0.txt` and will be used for the rest of the analysis.
 
 
 
@@ -59,10 +60,11 @@ After downloading and decompressing the files, these are the data that I will be
 
 | Software | Version | Additional libraries / modules                                                         |
 | -------- | ------- | -------------------------------------------------------------------------------------- |
-| R        | 3.6.0   | `data.table (v1.12.4)`, `ggplot2 (v3.2.0)`, `foreach (v1.4.7)`, `doParallel (v1.0.15)` |
+| R        | 3.3.3   | `data.table (v1.12.4)`, `ggplot2 (v3.2.0)`, `foreach (v1.4.7)`, `doParallel (v1.0.15)` |
 | Python   | 3.6.6   | `argparse (v1.1)`, `pandas (v0.23.4)`, `natsort (v6.0.0)`                              |
 | TASSEL   | 5.2.56  | -                                                                                      |
 | vcftools | 0.1.17  | -                                                                                      |
+| plink    | 1.9     | -                                                                                       |
 
 > Note: most of the bash `for` loops below can all be parallelized for better perfomance using [GNU parallel](https://www.gnu.org/software/parallel/). I'm show a sequential way of doing that because it's easier to understand.
 
@@ -111,17 +113,17 @@ done
 
 > TASSEL throws this error when sorting vcf files `ERROR net.maizegenetics.dna.map.PositionListBuilder - validateOrdering: Position	Chr:SCAF_100	Pos:79721	InsertionPos:0	Name:SSCAF_100_79721	Variants:A/C	MAF:NaN	Ref:A and Position	Chr:SCAF_99	Pos:109272	InsertionPos:0	Name:SSCAF_99_109272	Variants:T/A	MAF:NaN	Ref:T out of order`. However, I think it's just a warning showing which positions were in the wrong position. I'm able to load the sorted vcf file and transform it into hapmap format without problems. Also, no SNP is lost when sorting the file.
 
-Then, I converted the VCF file of SV calls for all NAM founders into hapmap with the following commands:
+Then, I converted the file with SV calls for all NAM founders into hapmap with the following commands:
 
 ```bash
 # go to project folder
 cd ~/projects/sv_nams
 
 # for explanation on how to use the script...
-python scripts/vcf2hapmap.py -h
+python scripts/variants2hapmap.py -h
 
 # convert SVs vcf to hmp
-python scripts/vcf2hapmap.py data/NAM-structural-variations-v2.0.vcf data/NAM_founders_SVs.not-sorted.hmp.txt
+python scripts/variants2hapmap.py data/NAM-structural-variations-v3.0.txt data/NAM_founders_SVs.not-sorted.hmp.txt
 
 # sort hmp file
 run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile data/NAM_founders_SVs.not-sorted.hmp.txt -outputFile data/NAM_founders_SVs.sorted.hmp.txt -fileType Hapmap
@@ -190,9 +192,11 @@ for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
 done
 
 # split vcf file by chromosome
+module load parallel
 for i in {1..10}; do
-  grep -w '^chr$i' data/GBS-output/populations.snps.vcf >> data/GBS-output/tmp/NAM_rils_SNPs.chr$i.vcf
+  sem -j +0 "grep -w '^chr$i' data/GBS-output/populations.snps.vcf >> data/GBS-output/tmp/NAM_rils_SNPs.chr$i.vcf"
 done
+sem --wait
 grep "^scaf_" data/GBS-output/populations.snps.vcf >> data/GBS-output/tmp/NAM_rils_SNPs.scaffs.vcf
 ```
 
@@ -275,9 +279,11 @@ cd ~/projects/sv_nams/data/GBS-output/tmp/
 # collapse duplicated SNPs
 for cross in $(ls -d B73x*); do
   for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  Rscript ~/projects/sv_nams/scripts/collapse_GBS_markers.R $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.hmp.txt $cross
+  echo "Rscript ~/projects/sv_nams/scripts/collapse_GBS_markers.R $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.hmp.txt $cross"
   done
-done
+done > ~/projects/sv_nams/scripts/commands_for_collapse-GBS-SNPs.txt
+
+qsub ~/projects/sv_nams/scripts/collapse_GBS_markers.sh
 ```
 
 After collapsing the duplicated SNPs, I merged the all hapmap files from each chromosome into one file.
@@ -308,8 +314,10 @@ The NAM parents were genotyped by both resequencing and GBS. Thus, it is possibl
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt ~/projects/sv_nams/data/tmp/NAM_founders_SNPs.chr1.hmp.txt $cross $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt
-done
+  echo "Rscript ~/projects/sv_nams/scripts/overlay_reseq-parental-SNPs_onto_GBS-data.R $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt ~/projects/sv_nams/data/tmp/NAM_founders_SNPs.chr1.hmp.txt $cross $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt"
+done > ~/projects/sv_nams/scripts/commands_for_overlay-parental-SNPs.txt
+
+qsub ~/projects/sv_nams/scripts/overlay_reseq-parental-SNPs_onto_GBS-data.sh
 
 # check number of SNPs per pop
 wc -l B73*/*not-in-SVs.reseq-overlay.hmp.txt
@@ -328,10 +336,12 @@ GBS data contain a lot of missing data and also a lot of redundant information (
 # go to data folder
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
-# filter SNPs
-for cross in $(ls -d B73x*); do
-  Rscript ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.R $cross $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt ~/projects/sv_nams/analysis/qc/filter_best_SNPs --max_missing=0.3 --window_size=15 --window_step=1 --min_snps_per_window=5
-done
+# # filter SNPs
+# for cross in $(ls -d B73x*); do
+#   Rscript ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.R $cross $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt ~/projects/sv_nams/analysis/qc/filter_best_SNPs --max_missing=0.3 --window_size=15 --window_step=1 --min_snps_per_window=5
+# done
+
+qsub ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.sh
 
 # check how many SNPs remained
 wc -l B73x*/*.not-imputed.best-markers.hmp.txt
@@ -457,7 +467,7 @@ cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 # sort parents sv+snps
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/S.$cross.hmp.txt -outputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -fileType Hapmap
+  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt -outputFile ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -fileType Hapmap
   run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -export ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt -exportType HapmapDiploid
 done
 
@@ -525,7 +535,7 @@ done
 # average missing data 0.09
 ```
 
-The average percentage of projected SVs across all populations was **87%** (~84k SVs) with average accuracy of **93%**. The amount projected was a bit higher (89%) if considering only polymorphic SVs between the two parents of a cross. Only four crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xP39, and B73xTzi8).
+The average percentage of projected SVs across all populations was **87%** (~180k SVs) with average accuracy of **93%**. The amount projected was a bit higher (88%) if considering only polymorphic SVs between the two parents of a cross. Only five crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xOh7B, B73xP39, and B73xTzi8).
 
 
 
@@ -578,45 +588,3 @@ iput -K NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
 # exit iRods
 iexit full
 ```
-
-
-
-
----
-
-# Panzea SNPs
-
-As an additional QC step, we wanted to make sure that the SNPs that were not missing in the GBS data were correct calls. To do that, I downloaded the SNP calls done by SNP chip for all NAM populations (available at [Panzea](https://www.panzea.org/genotypes) >> Legacy SNPs >> `NAM_map_and_genos-120731.zip`), plotted their karyotypes and compared to the ones plotted for the raw GBS data and the best markers.
-
-```bash
-cd ~/projects/sv_nams/data
-
-# download dataset
-wget http://de.iplantcollaborative.org/dl/d/B323A70C-F0D8-4BEF-9707-FD8198B5251C/NAM_map_and_genos-120731.zip
-unzip NAM_map_and_genos-120731.zip
-
-# merge hapmaps of chromosomes into one file
-cd NAM_map_and_genos-121025/hapmap/
-
-cat NAM_SNP_genos_raw_20090921_chr1.hmp > NAM_SNP_genos_raw_20090921.hmp.txt
-for chr in chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10; do
-  sed 1d NAM_SNP_genos_raw_20090921_$chr.hmp >> NAM_SNP_genos_raw_20090921.hmp.txt
-done
-
-# convert hapmap to diploid format
-run_pipeline.pl -Xmx1g -importGuess NAM_SNP_genos_raw_20090921.hmp.txt -export NAM_SNP_genos_raw_20090921.hmp.txt -exportType HapmapDiploid
-
-# create karyotypes
-cd ~/projects/sv_nams/data/GBS-output/tmp/
-
-for cross in $(ls -d B73x*); do
-  # ugly way to get the names of rils used to plot karyotypes
-  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/raw-gbs/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
-  # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotype_SNPchip.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/SNP_chip ~/projects/sv_nams/data/NAM_map_and_genos-121025/hapmap/NAM_SNP_genos_raw_20090921.hmp.txt --rils=$rils
-done
-```
-
-The karyotypes from GBS and SNP chip data agree very well, which gives us more confidence that the **GBS calls are correct**.
-
----
