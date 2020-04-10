@@ -890,3 +890,107 @@ for chr in {1..10}; do
   qsub -v CHR=$chr ~/projects/sv_nams/scripts/merge_reseq-snps_per_chr.sh
 done
 ```
+
+Write final RIL file with all resequencing SNPs and SVs projected (after removing duplicated SVs).
+
+```bash
+# merge all crosses with projected resequencing SNPs
+for chr in {1..10}; do
+  # exclude first columns for all crosses
+  cd ~/projects/sv_nams/data/tmp/
+  for cross in $(ls -d B73x*); do
+    echo $chr $cross
+    cut -f 1-11 --complement ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.reseq-snps-all-crosses.chr-$chr.projected.hmp.txt > ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt
+  done
+  # join all rils in one file (keep entire hmp file for cross B73xB97 though)
+  cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+  paste NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.reseq-snps-all-crosses.chr-$chr.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML103.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML228.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML247.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML277.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML322.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML333.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML52.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xCML69.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xHp301.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xIl14H.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xKi11.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xKi3.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xKy21.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xM162W.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xM37W.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xMo18W.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xMS71.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xNC350.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xNC358.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xOh43.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xOh7B.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xP39.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xTx303.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt \
+        NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xTzi8.reseq-snps-all-crosses.chr-$chr.rils-only.projected.hmp.txt > NAM_rils_SNPs-reseq_and_SVs-SNPs.reseq-snps-all-crosses.chr-$chr.projected.duplicated-SVs-removed.hmp.txt
+done
+
+# merge projected svs with projected snps
+# but first need to break parental data of SVs into chromosomes
+for chr in {1..10}; do
+  head -n 1 ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.duplicated-SVs-removed.hmp.txt > ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt
+  awk -v chr="$chr" '$3 == chr' ~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.duplicated-SVs-removed.hmp.txt >> ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt
+done
+
+# # make sure order of columns are the same
+# head -n 1 ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-1.hmp.txt > ~/projects/sv_nams/header_svs_dup-rem.txt
+# head -n 1 ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.reseq-snps-all-crosses.chr-1.projected.hmp.txt > ~/projects/sv_nams/header_snps2_dup-rem.txt
+# diff ~/projects/sv_nams/header_svs_dup-rem.txt ~/projects/sv_nams/header_snps2_dup-rem.txt
+
+# and then finally merge svs to snps
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+for chr in {1..10}; do
+  echo $chr
+  sed 1d NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt >> NAM_rils_SNPs-reseq_and_SVs-SNPs.reseq-snps-all-crosses.chr-$chr.projected.duplicated-SVs-removed.hmp.txt
+done
+
+# sort snps + svs
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+for chr in {2..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/sort_reseq-snps_and_svs.sh
+done
+
+# fix alleles column and transform to diploid hapmap
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/fix_allele_columns_reseq-snps.sh
+done
+
+# merge all chromosomes
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+cp NAM_rils_SNPs-reseq_and_SVs-SNPs.reseq-snps-all-crosses.chr-1.projected.duplicated-SVs-removed.hmp.txt NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v4.hmp.txt
+for chr in {2..10}; do
+  echo $chr
+  sed 1d NAM_rils_SNPs-reseq_and_SVs-SNPs.reseq-snps-all-crosses.chr-$chr.projected.duplicated-SVs-removed.hmp.txt >> NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v4.hmp.txt
+done
+```
+
+## Upload final hapmap to Cyverse
+
+Lastly, I uploaded the final hapmap file `~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v5.hmp.txt` to the shared folder on Cyverse.
+
+```bash
+# go to data folder of the project
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# i have a problem while uploading the file and couldn't delete it in cyverse (no privilege)
+# so i just created a copy of the final file and uploaded again (this time without problems)
+cp NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v4.hmp.txt NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v5.hmp.txt
+
+# log in to cyverse
+iinit
+# go to cyverse shared folder to download data
+icd /iplant/home/shared/NAM/Misc
+# check if files match what Arun described
+ils
+# upload data
+iput -K NAM_rils_SNPs-reseq_and_SVs-SNPs.projected.final.v5.hmp.txt
+# exit iRods
+iexit full
+```
