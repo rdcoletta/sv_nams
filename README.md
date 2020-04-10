@@ -728,39 +728,60 @@ for cross in $(ls -d B73x*); do
   head -n 1 ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt > ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-scaffs.hmp.txt
   grep -P "\tSCAF_" ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt >> ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-scaffs.hmp.txt
 done
-
-# # merge chromosomes
-# cd ~/projects/sv_nams/data/tmp/
-# cat B73xB97/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.chr-1.not-projected.hmp.txt > ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.not-projected.hmp.txt
-# for chr in 2 3 4 5 6 7 8 9 10 scaffs; do
-#   sed 1d B73xB97/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.chr-$chr.not-projected.hmp.txt >> ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.B73xB97.not-projected.hmp.txt
-# done
-
-# # merge chromosomes
-# cd ~/projects/sv_nams/data/tmp/
-# for cross in $(ls -d B73x*); do
-#   cat $cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.chr-1.not-projected.hmp.txt > ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.not-projected.hmp.txt
-#   for chr in 2 3 4 5 6 7 8 9 10 scaffs; do
-#     sed 1d $cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.chr-$chr.not-projected.hmp.txt >> ~/projects/sv_nams/data/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.not-projected.hmp.txt
-#   done
-# done
+```
 
 
-# write the script below
 
-#### make sure parents and rils have the same markers ----
+## Projection
 
-# first read parent and merged rils
+The projections will also done with FILLIN plugin from TASSEL for each NAM family separately, but with a bigger haplotype size since there are much more markers to project now. After some preliminary tests, using `-hapSize 70000` yielded the best projection rate and accuracy.
 
-# cat("Making sure parents and rils have the same SNPs\n")
-# parents.merged.filtered <- parents.merged[which(parents.merged[, 1] %in% rils.merged[, 1]), ]
-# fwrite(parents.merged.filtered, output.parents, quote = FALSE, sep = "\t", na = NA, row.names = FALSE)
-# cat("Done!\n\n")
+```bash
+cd ~/projects/sv_nams/data/tmp/
+
+# sort parents sv+snps
+for cross in $(ls -d B73x*); do
+  for chr in 1 2 3 4 5 6 7 8 9 10 scaffs; do
+    echo "run_pipeline.pl -Xmx5g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.hmp.txt -outputFile ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.sorted.hmp.txt -fileType Hapmap"
+  done
+done > ~/projects/sv_nams/scripts/commands_sort-parents_reseq-SNPs.txt
+
+# sort rils sv+snps
+for cross in $(ls -d B73x*); do
+  for chr in 1 2 3 4 5 6 7 8 9 10 scaffs; do
+    echo "run_pipeline.pl -Xmx5g -SortGenotypeFilePlugin -inputFile ~/projects/sv_nams/data/tmp/$cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.not-projected.hmp.txt -outputFile ~/projects/sv_nams/data/tmp/$cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.not-projected.sorted.hmp.txt -fileType Hapmap"
+  done
+done > ~/projects/sv_nams/scripts/commands_sort-rils_reseq-SNPs.txt
+
+# submit job
+qsub sort_parents-rils_reseq-SNPs.sh
 
 
-# # check that parents and rils have the same number of markers
-# for cross in $(ls -d B73x*); do
-#   wc -l ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.hmp.txt
-#   wc -l ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.hmp.txt
-# done
+# make sure the number of SNPs match among datasets
+for cross in $(ls -d B73x*); do
+  for chr in 1 2 3 4 5 6 7 8 9 10 scaffs; do
+    wc -l ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.sorted.hmp.txt
+    wc -l ~/projects/sv_nams/data/tmp/$cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.not-projected.sorted.hmp.txt
+  done
+done
+
+# create folder to store results
+mkdir ~/projects/sv_nams/analysis/reseq_snps_projection2/
+
+# create haplotypes from parents
+for cross in $(ls -d B73x*); do
+  for chr in 1 2 3 4 5 6 7 8 9 10 scaffs; do
+    echo "run_pipeline.pl -Xmx5g -FILLINFindHaplotypesPlugin -hmp ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.sorted.hmp.txt -o ~/projects/sv_nams/analysis/reseq_snps_projection2/donors_$cross-chr-$chr -hapSize 70000 -minTaxa 1"
+  done
+done > ~/projects/sv_nams/scripts/commands_donors_reseq-SNPs2.txt
+
+# impute ril genotypes based on parental haplotypes
+for cross in $(ls -d B73x*); do
+  for chr in 1 2 3 4 5 6 7 8 9 10 scaffs; do
+    echo "run_pipeline.pl -Xmx5g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/tmp/$cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/reseq_snps_projection2/donors_$cross-chr-$chr -o ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.projected.hmp.txt -hapSize 70000 -accuracy -hybNN false"
+  done
+done > ~/projects/sv_nams/scripts/commands_project_reseq-SNPs2.txt
+
+# submit job
+qsub ~/projects/sv_nams/scripts/project_reseq_snps.sh
 ```
