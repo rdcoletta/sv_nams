@@ -830,3 +830,31 @@ for cross in $(ls -d B73x*); do
   run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt -export ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt -exportType HapmapDiploid
 done
 ```
+
+After that, I can summarize projections of resequencing SNPs and plot karyotypes.
+
+```bash
+# calculate amount of projected SVs
+qsub ~/projects/sv_nams/scripts/count_projected_reseq_snps.sh
+
+# create folder to save karyotypes
+mkdir -p ~/projects/sv_nams/analysis/qc/karyotypes/reseq_snps_projection2
+
+# now plot karyotypes with projected SVs for few RILs of each cross
+cd ~/projects/sv_nams/data/tmp/
+for cross in $(ls -d B73x*); do
+  # ugly way to get the names of rils used to plot karyotype before imputation
+  rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/best-markers/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
+  # plot karyotypes for those rils
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_reseq-SNPs.R \
+          ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt \
+          ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed \
+          $cross \
+          ~/projects/sv_nams/analysis/qc/karyotypes/reseq_snps_projection2 \
+          ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt \
+          ~/projects/sv_nams/data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.poly.not-in-SVs.hmp.txt \
+          --rils=$rils
+done
+```
+
+The average percentage of projected SNPs across all populations was **92%%** with average accuracy of **97%**, and the karyotypes pretty much agree with those from the SV projections.
