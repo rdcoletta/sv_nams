@@ -831,7 +831,7 @@ for cross in $(ls -d B73x*); do
 done
 ```
 
-After that, I can summarize projections of resequencing SNPs and plot karyotypes.
+After that, I can summarize projections of resequencing SNPs and plot karyotypes. The average percentage of projected SNPs across all populations was **92%%** with average accuracy of **97%**, and the karyotypes pretty much agree with those from the SV projections.
 
 ```bash
 # calculate amount of projected SVs
@@ -857,4 +857,36 @@ for cross in $(ls -d B73x*); do
 done
 ```
 
-The average percentage of projected SNPs across all populations was **92%%** with average accuracy of **97%**, and the karyotypes pretty much agree with those from the SV projections.
+Since the projections were performed only for polymorphic SNPs to reduce computational time, now I have to add back the monomorphic SNPs for each family.
+
+```bash
+cd ~/projects/sv_nams/data/tmp/
+
+# create commands' file
+for cross in $(ls -d B73x*); do
+  for chr in {1..10}; do
+    echo "Rscript ~/projects/sv_nams/scripts/add_mono-reseq-SNPs_after_projection.R $cross $chr ~/projects/sv_nams/data/tmp ~/projects/sv_nams/analysis/reseq_snps_projection2"
+  done
+done > ~/projects/sv_nams/scripts/commands_add_mono-reseq-SNPs2.txt
+
+# submit job
+qsub ~/projects/sv_nams/scripts/add_mono_reseq_snps.sh
+```
+
+
+## Merge all projected SNPs of each family in one file
+
+Now I need add back snps that were not present in a certain cross to create a final file with information about all SNPs for all RILs (even if a SNP is missing in a RIL because it's not present in the parents).
+
+```bash
+# create empty hmp file with SNPS from all crosses for each chromosome
+# (this will help merge snps from different crosses in the next script)
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/create_empty_reseq-snps_file.sh
+done
+
+# add back snps not present in a cros
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/merge_reseq-snps_per_chr.sh
+done
+```
