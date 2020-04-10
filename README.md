@@ -611,3 +611,80 @@ Rscript scripts/remove_duplicated_SVs.R data/NAM_founders_SVs.hmp.txt analysis/p
 ```
 
 > Translocations were not considered in this filtering.
+
+
+
+
+# Projecting resequencing SNPs to NAM lines
+
+The NAM RILs have a high amount of missing SNPs because they were called from GBS data. Since the whole genome resequencing data for the NAM parents include ~27 million SNPs, we also decided to project these SNPs into RILs in a similar manner as described above for SVs.
+
+
+## Removing parental SNPs within SVs for each family
+
+I previously removed SNPs within SVs for the RIL data. Now I need to also remove SNPs within SVs in the parental resequencing data (`data/tmp/NAM_founders_SNPs.vcf`) separately for each NAM family, since these are the SNPs that will be projected.
+
+```bash
+# go to project folder
+cd ~/projects/sv_nams
+
+# correct typos and case of parental names
+# first get the vcf header
+grep "^#" data/B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf > data/tmp/NAM_founders_SNPs.vcf
+# add substitution expressions to sed command
+for sub in HP301/Hp301 IL14H/Il14H MS37W/M37W Ms71/MS71 OH43/Oh43 OH7B/Oh7B TX303/Tx303 TZi8/Tzi8; do
+  sed -i "\$s/$sub/" data/tmp/NAM_founders_SNPs.vcf
+done
+# add the rest of data
+grep -v "^#" data/B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf >> data/tmp/NAM_founders_SNPs.vcf
+
+
+# remove SNPs within SVs and divide file into NAM families
+{
+  # skip header of "nam_ril_populations.txt" file
+  read
+  # set delimeter to tab
+  IFS="\t"
+  # read file line by line
+  while read -r line; do
+    # get name of the cross being parsed
+    cross=$(echo $line | cut -f 1)
+    echo "$cross"
+    # check if directory exists; if it doesnt, create one to store results
+    [[ -d data/tmp/$cross ]] || mkdir -p data/tmp/$cross
+    # add the two parents of a cross in a file so that vcftools recognize 1 genotype to keep per line
+    echo "B73" > data/tmp/$cross/genotypes_to_keep.txt
+    echo $cross | cut -d "x" -f 2-3 >> data/tmp/$cross/genotypes_to_keep.txt
+    # use vcftools to filter a vcf file
+    vcftools --vcf data/tmp/NAM_founders_SNPs.vcf \
+             --keep data/tmp/$cross/genotypes_to_keep.txt \
+             --exclude-bed data/tmp/SNPs_to_remove_$cross.bed \
+             --out data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs \
+             --recode
+  done
+} < "data/nam_ril_populations.txt"
+
+# qsub scripts/filter_nam_parents_and_snps_witihin_svs_reseq_vcf.sh
+```
+
+Once the above job is done, I have to sort each vcf file and export into diploid hapmap format:
+
+```bash
+cd ~/projects/sv_nams/data/tmp/
+
+# commands for sorting
+# run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile B73xB97/NAM_parents-reseq_SNPs.B73xB97.not-in-SVs.recode.vcf -outputFile B73xB97/NAM_parents-reseq_SNPs.B73xB97.not-in-SVs.sorted.vcf -fileType VCF
+for cross in $(ls -d B73x*); do
+  echo "run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile $cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs.recode.vcf -outputFile $cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs.sorted.vcf -fileType VCF"
+done > ~/projects/sv_nams/scripts/commands_sort_vcf_reseq.txt
+
+# commands for transforming to hapmap
+# run_pipeline.pl -Xmx10g -importGuess B73xB97/NAM_parents-reseq_SNPs.B73xB97.not-in-SVs.sorted.vcf -export B73xB97/NAM_parents-reseq_SNPs.B73xB97.not-in-SVs.hmp.txt -exportType HapmapDiploid
+for cross in $(ls -d B73x*); do
+  echo "run_pipeline.pl -Xmx10g -importGuess $cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs.sorted.vcf -export $cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs.hmp.txt -exportType HapmapDiploid"
+done > ~/projects/sv_nams/scripts/commands_vc2hmp_reseq.txt
+
+module load parallel
+parallel --jobs 5 < ~/projects/sv_nams/scripts/commands_sort_vcf_reseq.txt
+parallel --jobs 5 < ~/projects/sv_nams/scripts/commands_vc2hmp_reseq.txt
+```
