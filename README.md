@@ -785,3 +785,48 @@ done > ~/projects/sv_nams/scripts/commands_project_reseq-SNPs2.txt
 # submit job
 qsub ~/projects/sv_nams/scripts/project_reseq_snps.sh
 ```
+
+I will run the sliding window approach again (but with higher window size: 45-bp window, 1-bp step size, minimum of 15 markers per window) to correct possible errors around recombination breakpoints after projections. But first, I need to transform donor and projected datasets to hapmap diploid format.
+
+```bash
+# transform parents hapmap to diploid format
+cd ~/projects/sv_nams/data/tmp/
+for cross in $(ls -d B73x*); do
+  for chr in {1..10}; do
+    run_pipeline.pl -Xmx10g -importGuess NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.sorted.hmp.txt -export ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.sorted.hmp.txt -exportType HapmapDiploid
+  done
+done
+
+# transform rils hapmap to diploid
+cd ~/projects/sv_nams/data/tmp/
+for cross in $(ls -d B73x*); do
+  for chr in {1..10}; do
+    echo "run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.projected.hmp.txt -export ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.projected.hmp.txt -exportType HapmapDiploid"
+  done
+done > ~/projects/sv_nams/scripts/commands_diploid-hmp_rils.txt
+
+module load parallel
+parallel --jobs 5 < ~/projects/sv_nams/scripts/commands_diploid-hmp_rils.txt
+
+# submit jobs for sliding window
+cd ~/projects/sv_nams/data/tmp/
+for cross in $(ls -d B73x*); do
+  for chr in {1..10}; do
+    qsub -v CHR=$chr,CROSS=$cross ~/projects/sv_nams/scripts/sliding_window_reseq_snps.sh
+  done
+done
+
+# merge chromosomes from projected hmp
+for cross in $(ls -d B73x*); do
+  cat ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-1.projected.sliding-window.hmp.txt > ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt
+  for chr in 2 3 4 5 6 7 8 9 10 scaffs; do
+    sed 1d ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.chr-$chr.projected.sliding-window.hmp.txt >> ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt
+  done
+  echo "$cross done!"
+done
+
+# correct alleles' column of hapmap
+for cross in $(ls -d B73x*); do
+  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt -export ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.projected.hmp.txt -exportType HapmapDiploid
+done
+```
