@@ -588,3 +588,26 @@ iput -K NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
 # exit iRods
 iexit full
 ```
+
+
+
+## Collapse duplicated SVs
+
+At this point, we realized that many SVs had overlaping boundaries, which may indicate that they represent actually the same SV. Thus, in order to identify and remove these duplicated SVs, I wrote `scripts/remove_duplicated_SVs.R`. The conditions for collapsing or not overlapping SVs are as follows:
+
+* If calls for overlapping SVs **are the same** across all parents:
+  - Keep only the SV with less missing data;
+  - If they have the same amount of missing data; keep the largest SV.
+* If calls for overlapping SVs **are not the same** across all parents:
+  - Keep both SVs (i.e. don't collapse)
+
+After filtering the parental dataset, the script will extract the names of remaining SVs and filter the RIl dataset. The output file is `analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.duplicated-SVs-removed.hmp.txt`
+
+```bash
+module load R
+cd ~/projects/sv_nams/
+
+Rscript scripts/remove_duplicated_SVs.R data/NAM_founders_SVs.hmp.txt analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
+```
+
+> Translocations were not considered in this filtering.
