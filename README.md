@@ -997,9 +997,9 @@ iexit full
 
 
 
-# Subsampling SNPs for GWAS
+# Creating SNP subsets for GWAS
 
-We want to understand whether or not SVs can capture phenotypic variation not explained by SNPs alone in GWAS, but since there are much more SNPs than SVs in our dataset, it would be an unfair comparison to run GWAS only with either type of marker. In addition, given the high density of SNPs, the level of LD between SNPs and SVs can lead to a biased result. Thus, we want to subsample SNPs according to their level of LD to SVs and also match the total number of SVs.
+We want to understand whether or not SVs can capture phenotypic variation not explained by SNPs alone in GWAS, but since there are much more SNPs than SVs in our dataset, it would be an unfair comparison to run GWAS only with either type of marker. In addition, given the high density of SNPs, the level of LD between SNPs and SVs can lead to a biased result. Thus, we want to subsample SNPs from RILs according to their level of LD to SVs and also match the total number of SVs.
 
 
 ## LD calculation
@@ -1027,3 +1027,312 @@ done
 ```
 
 > For LD calculations, set up the `--ld-window` to the same number as your `--ld-window-kb`. The former option looks at a window depending on the number of variants, while the latter looks at physical distance (in kb). This is important, because say you have 1000 variants in a 10 kb window. If you set the options `--ld-window 100` and `--ld-window-kb 10`, it will stop calculating LD after it looks at the first 100 variants (so you don’t cover the whole 10kb window). Also `--make-founders` will calculate ld among all your lines in your dataset. Also set `--ld-window-r2 0` to make sure plink reports r2 value of zero or more (the default is 0.2).
+
+
+## Subsets for GWAS
+
+To reduce interference of missing data in downstream analyses, we will select only non-translocation SVs with more than 80% data across the families that had information in the founders, and SNPs that have more than 80% data across all families (because we want to make sure to use SNPs that have low amount of missing data, otherwise, the LD between an SV and a SNP can be biased).
+
+```bash
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# create directory to store file
+mkdir -p ld/missing_data_filter
+
+# get name of all SVs after removing duplicates
+cut -f 1 analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.duplicated-SVs-removed.hmp.txt | sed 1d > analysis/projection/SV_names_after_removing_duplicates.txt
+# get summary of the number of projected RILs per SV ("summary_projected_RILs_per_sv.txt")
+Rscript scripts/count_projected_SVs.R ~/projects/sv_nams/data ~/projects/sv_nams/analysis/projection
+
+# get names of all SNPs first
+grep -v -P "^#" data/tmp/NAM_founders_SNPs.vcf | cut -f 1-2 | grep -v "scaf" | tr "\t" "_" | sed "s/^chr/S/" > data/tmp/all_SNP_names.txt
+# get summary of the number of projected RILs per reseq SNP ("summary_projected_RILs_per_reseq-snp.txt")
+Rscript scripts/count_projected_reseq-SNPs.R ~/projects/sv_nams/data/tmp ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# keep only SNPs present in 80% or more families in the LD file
+
+# create directory to store file
+mkdir -p ld/missing_data_filter
+# run tassel to determine amount of missing data per marker
+for chr in {1..10}; do
+ qsub -v CHR=$chr ~/projects/sv_nams/scripts/tassel_summary_final_NAM_set.sh
+done
+# go to folder
+cd ld/missing_data_filter/
+# get number of column with info about missing data
+head -n 1 tassel_summary_chr-10_NAM_rils_3.txt | tr '\t' '\n' | cat -n | grep "Proportion Missing"
+# 33	Proportion Missing
+# get marker names to keep
+for chr in {1..10}; do
+  sed 1d tassel_summary_chr-$chr\_NAM_rils_3.txt | awk '$33 <= 0.2' | cut -f 2 | grep -P "^S" > SNPs_low_missing-data_chr-$chr.txt
+done
+cat SNPs_low_missing-data_chr-1.txt > SNPs_low_missing-data.txt
+for chr in {2..10}; do
+  cat SNPs_low_missing-data_chr-$chr.txt >> SNPs_low_missing-data.txt
+done
+
+# filter by amount of missing data given there are information about the marker in the parents
+cd ~/projects/sv_nams
+Rscript scripts/filter_markers_by_missing_RILs.R analysis/projection/summary_projected_RILs_per_sv.txt \
+                                                 analysis/projection/SV_names_after_removing_duplicates.txt \
+                                                 analysis/reseq_snps_projection2/summary_projected_RILs_per_reseq-snp.txt \
+                                                 analysis/reseq_snps_projection2/ld/missing_data_filter/SNPs_low_missing-data.txt \
+                                                 0.8 \
+                                                 analysis/reseq_snps_projection2/ld/missing_data_filter
+
+# get names of all non-translocation SVs for each chromosome
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+for chr in {1..10}; do
+ grep -v -P "^S" ld/missing_data_filter/markers_to_keep_chr-$chr\_missing_filter.txt > ~/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr$chr.txt
+done
+# merge all chromosomes
+cd ~/projects/sv_nams/data/subset-NAM-snps/
+cp SVs-to-keep.missing-filter.no-tra.chr1.txt SVs-to-keep.missing-filter.no-tra.txt
+for chr in {2..10}; do
+ cat SVs-to-keep.missing-filter.no-tra.chr$chr.txt >> SVs-to-keep.missing-filter.no-tra.txt
+done
+
+# get names of all SNPs with more than 80% data for each chromosome
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+for chr in {1..10}; do
+ grep -P "^S" ld/missing_data_filter/markers_to_keep_chr-$chr\_missing_filter.txt > ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep.missing-filter.chr$chr.txt
+done
+# merge all chromosomes
+cd ~/projects/sv_nams/data/subset-NAM-snps/
+cp SNPs-to-keep.missing-filter.chr1.txt SNPs-to-keep.missing-filter.txt
+for chr in {2..10}; do
+ cat SNPs-to-keep.missing-filter.chr$chr.txt >> SNPs-to-keep.missing-filter.txt
+done
+```
+
+There were **277,527 non-translocation SVs** with more than 80% data among RILs that had information on the founders. Then, we randomly selected SNPs to match that number of filtered SVs (subset 1), selected a single SNP in highest LD for each SV (or closest one if more than one SNP with highest LD; subset 2), and randomly selected SNPs that were not in LD with any SV (R2 < 0.2; subset 3).
+
+```bash
+# there are 277,527 SVs in total to sample
+wc -l ~/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr*.txt
+# 21244 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr10.txt
+# 45737 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr1.txt
+# 25858 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr2.txt
+# 30790 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr3.txt
+# 26823 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr4.txt
+# 31454 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr5.txt
+# 25659 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr6.txt
+# 20805 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr7.txt
+# 26389 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr8.txt
+# 22768 /home/hirschc1/della028/projects/sv_nams/data/subset-NAM-snps/SVs-to-keep.missing-filter.no-tra.chr9.txt
+
+# make sure to use SNPs that have R2 calculated to an SV with more than 80% data
+cd /scratch.global/della028/hirsch_lab/ld_files
+for chr in {1..10}; do
+  echo $chr
+  grep -Fxf SNPs_after_plink_ld-w-100_v2.$chr.no-tra.snp-sv.txt ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep.missing-filter.chr$chr.txt > SNPs_after_plink_ld-w-100_v2.$chr.no-tra.snp-sv.missing-filter.txt
+done
+
+# subsample SNPs by chromosome based on number of SVs above
+shuf SNPs_after_plink_ld-w-100_v2.1.no-tra.snp-sv.missing-filter.txt -n 45737 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr1.txt
+shuf SNPs_after_plink_ld-w-100_v2.2.no-tra.snp-sv.missing-filter.txt -n 25858 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr2.txt
+shuf SNPs_after_plink_ld-w-100_v2.3.no-tra.snp-sv.missing-filter.txt -n 30790 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr3.txt
+shuf SNPs_after_plink_ld-w-100_v2.4.no-tra.snp-sv.missing-filter.txt -n 26823 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr4.txt
+shuf SNPs_after_plink_ld-w-100_v2.5.no-tra.snp-sv.missing-filter.txt -n 31454 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr5.txt
+shuf SNPs_after_plink_ld-w-100_v2.6.no-tra.snp-sv.missing-filter.txt -n 25659 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr6.txt
+shuf SNPs_after_plink_ld-w-100_v2.7.no-tra.snp-sv.missing-filter.txt -n 20805 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr7.txt
+shuf SNPs_after_plink_ld-w-100_v2.8.no-tra.snp-sv.missing-filter.txt -n 26389 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr8.txt
+shuf SNPs_after_plink_ld-w-100_v2.9.no-tra.snp-sv.missing-filter.txt -n 22768 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr9.txt
+shuf SNPs_after_plink_ld-w-100_v2.10.no-tra.snp-sv.missing-filter.txt -n 21244 -o ~/projects/sv_nams/data/subset-NAM-snps/SNPs-to-keep_random-missing-filter_chr10.txt
+
+
+# subsample random SNPs based on SNPs with very high or with very low LD
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/subsample_high-low_ld.sh
+done
+
+# # results: 272,009 snps in high ld
+# 42473 SNPs-to-keep_subsample-high-ld_chr1.missing-filter.txt
+# 25726 SNPs-to-keep_subsample-high-ld_chr2.missing-filter.txt
+# 30648 SNPs-to-keep_subsample-high-ld_chr3.missing-filter.txt
+# 26701 SNPs-to-keep_subsample-high-ld_chr4.missing-filter.txt
+# 31352 SNPs-to-keep_subsample-high-ld_chr5.missing-filter.txt
+# 25267 SNPs-to-keep_subsample-high-ld_chr6.missing-filter.txt
+# 20740 SNPs-to-keep_subsample-high-ld_chr7.missing-filter.txt
+# 26282 SNPs-to-keep_subsample-high-ld_chr8.missing-filter.txt
+# 22412 SNPs-to-keep_subsample-high-ld_chr9.missing-filter.txt
+# 20408 SNPs-to-keep_subsample-high-ld_chr10.missing-filter.txt
+
+# # results: 277,527 snps in low ld
+# 45737 SNPs-to-keep_subsample-low-ld_chr1.missing-filter.txt
+# 25858 SNPs-to-keep_subsample-low-ld_chr2.missing-filter.txt
+# 30790 SNPs-to-keep_subsample-low-ld_chr3.missing-filter.txt
+# 26823 SNPs-to-keep_subsample-low-ld_chr4.missing-filter.txt
+# 31454 SNPs-to-keep_subsample-low-ld_chr5.missing-filter.txt
+# 25659 SNPs-to-keep_subsample-low-ld_chr6.missing-filter.txt
+# 20805 SNPs-to-keep_subsample-low-ld_chr7.missing-filter.txt
+# 26389 SNPs-to-keep_subsample-low-ld_chr8.missing-filter.txt
+# 22768 SNPs-to-keep_subsample-low-ld_chr9.missing-filter.txt
+# 21244 SNPs-to-keep_subsample-low-ld_chr10.missing-filter.txt
+```
+
+> The reason why the subset with SNPs in high LD with an SV had less SNPs than 277k is that plink doesn't compute LD for markers that have minimum allele frequency less than 0.05 or that are monomorphic. Since the difference is minimal, it is unlikely to interfere with the GWAS.
+
+I ploted and summarized the R2 distribution for each subset.
+
+```bash
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/distribution_snp-sv_ld.sh
+done
+```
+
+Now, I have to filter the hapmap files to include only the SNPs from each subset, and then merged each hapmap dataset separately.
+
+```bash
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/subset_hmp_based_on_ld.sh
+done
+
+# quick check results
+for subset in snps-low-ld-sv snps-high-ld-sv snps-random; do
+  wc -l NAM_rils_subset_SNPs.chr-*.$subset.hmp.txt
+  echo " "
+done
+
+# merge all chromosomes
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# low ld
+cp NAM_rils_subset_SNPs.chr-1.snps-low-ld-sv.hmp.txt NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt
+for chr in {2..10}; do
+  echo $chr
+  sed 1d NAM_rils_subset_SNPs.chr-$chr.snps-low-ld-sv.hmp.txt >> NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt
+done
+
+# high ld
+cp NAM_rils_subset_SNPs.chr-1.snps-high-ld-sv.hmp.txt NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt
+for chr in {2..10}; do
+  echo $chr
+  sed 1d NAM_rils_subset_SNPs.chr-$chr.snps-high-ld-sv.hmp.txt >> NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt
+done
+
+# random snps
+cp NAM_rils_subset_SNPs.chr-1.snps-random.hmp.txt NAM_rils_subset_SNPs.snps-random.hmp.txt
+for chr in {2..10}; do
+  echo $chr
+  sed 1d NAM_rils_subset_SNPs.chr-$chr.snps-random.hmp.txt >> NAM_rils_subset_SNPs.snps-random.hmp.txt
+done
+
+# compress for faster upload on cyverse later
+gzip NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt
+gzip NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt
+gzip NAM_rils_subset_SNPs.snps-random.hmp.txt
+```
+
+I also created a hapmap only with SV subset to be used in GWAS comparisons.
+
+```bash
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/subset_hmp_based_on_ld_svs.sh
+done
+
+# merge all chromosomes
+cp NAM_rils_subset_SVs.chr-1.hmp.txt NAM_rils_subset_SVs.hmp.txt
+for chr in {2..10}; do
+  echo $chr
+  sed 1d NAM_rils_subset_SVs.chr-$chr.hmp.txt >> NAM_rils_subset_SVs.hmp.txt
+done
+
+# compress for faster upload
+gzip NAM_rils_subset_SVs.hmp.txt
+```
+
+After creating all subsets, I performed some QC to make sure the data is ready for GWAS. I ploted the distribution of SNPs along the chromosome to see where the markers are in the genome, ploted the distribution of missing data for each dataset, and also the distribution of R2 values between SNPs and SVs.
+
+```bash
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# distribution SNPs (or SNPs + SV) along chromosomes
+Rscript scripts/distribution_snps-svs_chrom.R ld/subset_high-ld-snps/SNPs-kept_chr1.txt \
+                                              ld/subset_high-ld-snps/distribution_snps_chrom_high.png
+
+Rscript scripts/distribution_snps-svs_chrom.R ld/subset_low-ld-snps/SNPs-kept_chr1.txt \
+                                              ld/subset_low-ld-snps/distribution_snps_chrom_low.png
+
+Rscript scripts/distribution_snps-svs_chrom.R ld/subset_random-snps/SNPs-kept_chr1.txt \
+                                              ld/subset_random-snps/distribution_snps_chrom_random.png
+
+
+# histogram percent missing data for each subset
+run_pipeline.pl -Xmx40g -importGuess NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt \
+                -GenotypeSummaryPlugin -endPlugin \
+                -export ld/subset_high-ld-snps/tassel_summary
+
+run_pipeline.pl -Xmx40g -importGuess NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt \
+                -GenotypeSummaryPlugin -endPlugin \
+                -export ld/subset_low-ld-snps/tassel_summary
+
+run_pipeline.pl -Xmx40g -importGuess NAM_rils_subset_SNPs.snps-random.hmp.txt \
+                -GenotypeSummaryPlugin -endPlugin \
+                -export ld/subset_random-snps/tassel_summary
+
+run_pipeline.pl -Xmx40g -importGuess NAM_rils_subset_SVs.hmp.txt \
+                -GenotypeSummaryPlugin -endPlugin \
+                -export ld/tassel_summary_sv
+
+Rscript scripts/qc_tassel_summary.R ld/subset_high-ld-snps/tassel_summary3.txt \
+                                    ld/subset_high-ld-snps/missing_snps_high.png
+
+Rscript scripts/qc_tassel_summary.R ld/subset_low-ld-snps/tassel_summary3.txt \
+                                    ld/subset_low-ld-snps/missing_snps_low.png
+
+Rscript scripts/qc_tassel_summary.R ld/subset_random-snps/tassel_summary3.txt \
+                                    ld/subset_random-snps/missing_snps_random.png
+
+Rscript scripts/qc_tassel_summary.R ld/tassel_summary_sv3.txt \
+                                    ld/missing_svs_subset.png
+
+# plot distribution R2
+Rscript scripts/distribution_snps-LD-svs_all-chr.R ld/subset_high-ld-snps \
+                                                   ld/subset_high-ld-snps/dist-LD_SNPs-SVs_high.png
+
+Rscript scripts/distribution_snps-LD-svs_all-chr.R ld/subset_low-ld-snps \
+                                                   ld/subset_low-ld-snps/dist-LD_SNPs-SVs_low.png
+
+Rscript scripts/distribution_snps-LD-svs_all-chr.R ld/subset_random-snps \
+                                                   ld/subset_random-snps/dist-LD_SNPs-SVs_random.png
+
+```
+
+Finally, I uploaded the 4 subsets (3 SNP subsets and 1 SV subset) to Cyverse:
+
+```bash
+# go to data folder of the project
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# i made a mistake the first time I uploaded this into cyverse, so i will create a copy
+# (because i don't have authorization to remove a file from cyverse folder)
+cp NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt.gz NAM_rils_subset_SNPs.snps-high-ld-sv.v2.hmp.txt.gz
+cp NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt.gz NAM_rils_subset_SNPs.snps-low-ld-sv.v2.hmp.txt.gz
+cp NAM_rils_subset_SNPs.snps-random.hmp.txt.gz NAM_rils_subset_SNPs.snps-random.v2.hmp.txt.gz
+
+# log in to cyverse
+iinit
+# go to cyverse shared folder to download data
+icd /iplant/home/shared/NAM/Misc
+# check if files match what Arun described
+ils
+# upload data
+iput -K NAM_rils_subset_SNPs.snps-high-ld-sv.v2.hmp.txt.gz
+iput -K NAM_rils_subset_SNPs.snps-low-ld-sv.v2.hmp.txt.gz
+iput -K NAM_rils_subset_SNPs.snps-random.v2.hmp.txt.gz
+iput -K NAM_rils_subset_SVs.hmp.txt.gz
+# exit iRods
+iexit full
+
+# gunzip NAM_rils_subset_SNPs.snps-random.hmp.txt.gz
+# gunzip NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt.gz
+# gunzip NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt.gz
+# gunzip NAM_rils_subset_SVs.hmp.txt.gz
+```
