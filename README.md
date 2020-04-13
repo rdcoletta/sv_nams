@@ -1,6 +1,6 @@
 # Projecting SVs to NAM lines
 
-by Rafael Della Coletta and Candice Hirsch (September-December, 2019)
+by Rafael Della Coletta and Candice Hirsch (September, 2019 - April, 2020)
 
 > The goal of this analysis is to project structural variants (SVs) indentified in the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines.
 
@@ -1335,4 +1335,42 @@ iexit full
 # gunzip NAM_rils_subset_SNPs.snps-high-ld-sv.hmp.txt.gz
 # gunzip NAM_rils_subset_SNPs.snps-low-ld-sv.hmp.txt.gz
 # gunzip NAM_rils_subset_SVs.hmp.txt.gz
+```
+
+
+
+# Full SNP and SV dataset
+
+Dr. Tingting requested datasets containing information about all SNPs and all SVs separately (and split into 10 chromosomes each). I already have the files ready for SVs, but for SNP files I will need to quickly filter the final file with both SNPs and SVs. Then I just need compress the files and upload them into Cyverse.
+
+```bash
+cd ~/projects/sv_nams/analysis/reseq_snps_projection2
+
+# svs
+for chr in {1..10}; do
+  echo $chr
+  gzip -c NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt > NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt.gz
+done
+
+# snps
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/split_reseq-snps_by_chr.sh
+done
+
+# log in to cyverse
+iinit
+# go to cyverse shared folder to download data
+icd /iplant/home/shared/NAM/Misc
+# check if files match what Arun described
+ils
+# upload SV dataset
+for chr in {1..10}; do
+  iput -K NAM_rils_projected-SVs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt.gz
+done
+# upload SNP datasets
+for chr in {1..10}; do
+  iput -K NAM_rils_projected-reseq-SNPs-only.all-RILs.duplicated-SVs-removed.chr-$chr.hmp.txt.gz
+done
+# exit iRods
+iexit full
 ```
