@@ -22,7 +22,7 @@ mkdir -p sv_nams/{analysis,data,scripts}
 
 ## Transfering data from CyVerse to local folder
 
-On November 27th, Dr. Arun Seetharam shared the data needed for SV projection via CyVerse. The CyVerse path to the data is `/iplant/home/shared/NAM/PANDA/SVs-impute`. The following commands were used to transfer this data to my folder at MSI so I can do my analyses.
+On November 27th, Dr. Arun Seetharam shared the data needed for SV projection via CyVerse (SNPs) and Slack (SVs). The SNP data was located in the CyVerse folder `/iplant/home/shared/NAM/PANDA/SVs-impute`. The following commands were used to transfer this data to my folder at MSI so I can do my analyses.
 
 
 ```bash
@@ -36,23 +36,28 @@ icd /iplant/home/shared/NAM/PANDA/SVs-impute
 # check if files match what Arun described
 ils
 # download data
-iget -K NAM-structural-variations-v2.0.vcf.gz
 iget -K GBS-output.tar.gz
 iget -K B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf.gz
 
 # decompress files
-gunzip NAM-structural-variations-v2.0.vcf.gz
 tar xvzf GBS-output.tar.gz
 gunzip B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf.gz
 ```
 
+The SV dataset was sent via Slack, and they were two files from two different SV calling methods (SNIFFLES and BioNano), which were merged into a single file later. I downloaded the files on my personal Mac and transferred them to the `data` folder in my MSI account via FileZilla.
+
+```bash
+# decompress files
+gunzip data/NAM-SVs_SNIFFLES-min100-max1Mb-depth25_v6.vcf.gz
+gunzip data/NAM-SVs_BioNano-min1Mb.txt.gz
+```
+
 After downloading and decompressing the files, these are the data that I will be using:
 
-* `NAM-structural-variations-v2.0.vcf`: file with SV calls for NAM founders.
+* `NAM-SVs_SNIFFLES-min100-max1Mb-depth25_v6.vcf`: file with SNIFFLES SV calls (up to 1 Mb) for NAM founders.
+* `NAM-SVs_BioNano-min1Mb.txt`: file with BioNano SV calls (curated SVs larger than 1 Mb) for NAM founders.
 * `B73v5.NAM-illumina_filtered-pass-only-two-round-gatk-snps.vcf`: file with SNP calls for NAM founders.
 * `GBS-output/populations.snps.vcf`: file with SNP calls (GBS) for all NAM lines.
-
-**UPDATE:** on February 5th, Arun sent me the newest version of the SV calls via Slack. This version corrects the high amount of missing data called on previous versions. The filename is `data/NAM-structural-variations-v3.0.txt` and will be used for the rest of the analysis.
 
 
 
@@ -66,7 +71,7 @@ After downloading and decompressing the files, these are the data that I will be
 | vcftools | 0.1.17  | -                                                                                      |
 | plink    | 1.9     | -                                                                                       |
 
-> Note: most of the bash `for` loops below can all be parallelized for better perfomance using [GNU parallel](https://www.gnu.org/software/parallel/). I'm show a sequential way of doing that because it's easier to understand.
+> Note: most of the bash `for` loops below can all be parallelized for better perfomance using [GNU parallel](https://www.gnu.org/software/parallel/). I'm showing a sequential way of doing that because it's easier to understand.
 
 
 
@@ -113,27 +118,82 @@ done
 
 > TASSEL throws this error when sorting vcf files `ERROR net.maizegenetics.dna.map.PositionListBuilder - validateOrdering: Position	Chr:SCAF_100	Pos:79721	InsertionPos:0	Name:SSCAF_100_79721	Variants:A/C	MAF:NaN	Ref:A and Position	Chr:SCAF_99	Pos:109272	InsertionPos:0	Name:SSCAF_99_109272	Variants:T/A	MAF:NaN	Ref:T out of order`. However, I think it's just a warning showing which positions were in the wrong position. I'm able to load the sorted vcf file and transform it into hapmap format without problems. Also, no SNP is lost when sorting the file.
 
-Then, I converted the file with SV calls for all NAM founders into hapmap with the following commands:
+Then, I converted the two files with SV calls (SNIFFLES and BioNano) for all NAM founders into hapmap with two different python scripts, since each file has a different format.
 
 ```bash
 # go to project folder
 cd ~/projects/sv_nams
 
-# for explanation on how to use the script...
+# for explanation on how to use the scripts...
+python scripts/vcf2hapmap.py -h
 python scripts/variants2hapmap.py -h
 
 # convert SVs vcf to hmp
-python scripts/variants2hapmap.py data/NAM-structural-variations-v3.0.txt data/NAM_founders_SVs.not-sorted.hmp.txt
+python scripts/vcf2hapmap.py data/NAM-SVs_SNIFFLES-min100-max1Mb-depth25_v6.vcf data/NAM_founders_SVs.sniffles.not-sorted.hmp.txt
+python scripts/variants2hapmap.py data/NAM-SVs_BioNano-min1Mb.txt data/NAM_founders_SVs.bionano.not-sorted.hmp.txt
 
 # sort hmp file
-run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile data/NAM_founders_SVs.not-sorted.hmp.txt -outputFile data/NAM_founders_SVs.sorted.hmp.txt -fileType Hapmap
-# convert to diploid format
-run_pipeline.pl -Xmx10g -importGuess data/NAM_founders_SVs.sorted.hmp.txt -export data/NAM_founders_SVs.hmp.txt -exportType HapmapDiploid
+run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin \
+                -inputFile data/NAM_founders_SVs.sniffles.not-sorted.hmp.txt \
+                -outputFile data/NAM_founders_SVs.sniffles.sorted.hmp.txt \
+                -fileType Hapmap
+run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin \
+                -inputFile data/NAM_founders_SVs.bionano.not-sorted.hmp.txt \
+                -outputFile data/NAM_founders_SVs.bionano.sorted.hmp.txt \
+                -fileType Hapmap
+# convert to diploid format (need to exclude B73 from sniffles since it's not
+# present in the bionano dataset)
+run_pipeline.pl -Xmx10g -importGuess data/NAM_founders_SVs.sniffles.sorted.hmp.txt \
+                -excludeTaxa B73 \
+                -export data/NAM_founders_SVs.sniffles.hmp.txt,data/filter_json \
+                -exportType HapmapDiploid
+run_pipeline.pl -Xmx10g -importGuess data/NAM_founders_SVs.bionano.sorted.hmp.txt \
+                -export data/NAM_founders_SVs.bionano.hmp.txt \
+                -exportType HapmapDiploid
 ```
 
 Additional information about the SV is displayed on its ID, since hapmap format doesn't have fields available for adding such information. For example, the ID `del.chr1.51711.71809` on the first column of the hapmap file means that the SV is a deletion on chr1 that starts at 51,711 and ends at 71,809. The second column will also have the chromosome location for that deletion, but the third column will contain the **midpoint position** for that SV (i.e. 61,760). These two columns will always be the coordinates according to the reference genome. Although there will be somewhat redundant information on IDs of most SVs (like DELs, DUPs, INSs, and INVs), the ID will contain very important info about translocations, as it will show the respective location of the TRA in the **non-reference chromosome**.
 
 Importantly, any SV called as heterozygous in the VCF file (i.e. `0/1`) was considered as **not** having a SV, therefore they were coded as `AA`.
+
+
+
+### Merge SV calls from SNIFFLES and BioNano
+
+One problem with the BioNano SV calls is that the same SV can have slightly different, but overlapping, boundaries. The boundaries are fuzzy because of the methodology itself that cannot accurately tell what the start and end position of the SV are. Thus, we decided to collapse the information of SVs that have overlapping boundaries as they may actually represent the same SV. The approach for collapsing was: for each SV type that had overlapping boundaries, I selected the smallest start position and the greatest end position to be the coordinates for the collapsed SV. Then, I just merged their genotypic calls. I wrote `scripts/collapse_bionano_SVs.R` to do this.
+
+```bash
+# go to project folder
+cd ~/projects/sv_nams
+
+# collapse SVs
+Rscript scripts/collapse_bionano_SVs.R data/NAM_founders_SVs.bionano.hmp.txt
+```
+
+After that, I merged information from SNIFFLES and BioNano in a single file called `data/NAM_founders_SVs.hmp.txt`.
+
+```bash
+# go to project folder
+cd ~/projects/sv_nams
+
+# make sure the order of NAMs in hapmaps are the same
+head -n 1 data/NAM_founders_SVs.sniffles.hmp.txt data/NAM_founders_SVs.bionano.collapsed.hmp.txt
+# they are
+
+# merge files (use "sed 1d" to skip header of the bionano hapmap)
+cat data/NAM_founders_SVs.sniffles.hmp.txt > data/NAM_founders_SVs.not-sorted.hmp.txt
+sed 1d data/NAM_founders_SVs.bionano.collapsed.hmp.txt >> data/NAM_founders_SVs.not-sorted.hmp.txt
+# sort hmp file
+run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin \
+                -inputFile data/NAM_founders_SVs.not-sorted.hmp.txt \
+                -outputFile data/NAM_founders_SVs.sorted.hmp.txt \
+                -fileType Hapmap
+# convert to diploid format
+run_pipeline.pl -Xmx10g -importGuess data/NAM_founders_SVs.sorted.hmp.txt \
+                -export data/NAM_founders_SVs.hmp.txt \
+                -exportType HapmapDiploid
+```
+
 
 
 ### Identifying SNPs that are within the boundaries of a SV
