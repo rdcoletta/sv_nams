@@ -5,6 +5,10 @@ by Rafael Della Coletta and Candice Hirsch (September, 2019 - April, 2020)
 > The goal of this analysis is to project structural variants (SVs) indentified in the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines.
 
 
+<mark> TO DO:</mark>
+* Fix `help` functions of all scripts
+* Create a Table of Content for this README
+
 
 
 ## Project folder
@@ -206,7 +210,9 @@ SNPs that are found inside deletions are problematic, because they will have seg
 # go to project folder
 cd ~/projects/sv_nams
 
-# column numbers corresponding to NAM parents range from 13 to 37
+# correct name of a NAM parent in the merged file
+sed -i "s/IL14/IL14H/" data/NAM_founders_SVs.hmp.txt
+# column numbers corresponding to NAM parents range from 13 to 37 (skip B73_Ab10)
 for i in {13..37}; do
   # get NAM name
   NAM=$(head -n 1 data/NAM_founders_SVs.hmp.txt | cut -f $i)
@@ -271,47 +277,40 @@ head -n 1 data/GBS-output/populations.sumstats.tsv | cut -f 2 > data/nam_ril_pop
 # rearrange information in a table
 python scripts/create_file_with_nam_rils_info.py data/nam_ril_populations.txt
 
-# read "data/nam_ril_populations.txt" file line by line for each chromosome
-for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  {
-    # skip header of "nam_ril_populations.txt" file
-    read
-    # set delimeter to tab
-    IFS="\t"
-    # read file line by line
-    while read -r line; do
-      # get name of the cross being parsed
-      cross=$(echo $line | cut -f 1)
-      # check if directory exists; if it doesnt, create one to store results
-      [[ -d data/GBS-output/tmp/$cross ]] || mkdir -p data/GBS-output/tmp/$cross
-      # transform line of the file into multiple lines so that vcftools recognize 1 genotype to keep per line
-      echo $line |  tr "\t" "\n" | tr "," "\n" > data/GBS-output/tmp/$cross/genotypes_to_keep.txt
-      # use vcftools to filter a vcf file
-      vcftools --vcf data/GBS-output/tmp/NAM_rils_SNPs.$chr.vcf \
-               --keep data/GBS-output/tmp/$cross/genotypes_to_keep.txt \
-               --exclude-bed data/tmp/SNPs_to_remove_$cross.bed \
-               --out data/GBS-output/tmp/$cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs \
-               --recode \
-               --recode-INFO-all
-    done
-  } < "data/nam_ril_populations.txt"
+# filter vcf files for each chromosome...
+for chr in {1..10}; do
+  qsub -v CHR=$chr ~/projects/sv_nams/scripts/filter_nam_rils_and_snps_within_svs_vcf.sh
 done
+# ...and for scaffolds
+{
+  # skip header of "nam_ril_populations.txt" file
+  read
+  # set delimeter to tab
+  IFS="\t"
+  # read file line by line
+  while read -r line; do
+    # get name of the cross being parsed
+    cross=$(echo $line | cut -f 1)
+    # check if directory exists; if it doesnt, create one to store results
+    [[ -d data/GBS-output/tmp/$cross ]] || mkdir -p data/GBS-output/tmp/$cross
+    # transform line of the file into multiploe lines so that vcftools recognize 1 genotype to keep per line
+    echo $line |  tr "\t" "\n" | tr "," "\n" > data/GBS-output/tmp/$cross/genotypes_to_keep.txt
+    # use vcftools to filter a vcf file
+    vcftools --vcf data/GBS-output/tmp/NAM_rils_SNPs.scaffs.vcf \
+             --keep data/GBS-output/tmp/$cross/genotypes_to_keep.txt \
+             --exclude-bed data/tmp/SNPs_to_remove_$cross.bed \
+             --out data/GBS-output/tmp/$cross/NAM_rils_SNPs.$cross.scaffs.not-in-SVs \
+             --recode \
+             --recode-INFO-all
+  done
+} < "data/nam_ril_populations.txt"
 
 # once the above is done, i have to sort each vcf file and export to hapmap format
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
-# commands for sorting
+# commands for sorting and transforming to hapmap
 for cross in $(ls -d B73x*); do
-  for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  vcf-sort $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.recode.vcf > $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.sorted.vcf
-  done
-done
-
-# commands for transforming to hapmap
-for cross in $(ls -d B73x*); do
-  for chr in chr1 chr2 chr3 chr4 chr5 chr6 chr7 chr8 chr9 chr10 scaffs; do
-  run_pipeline.pl -Xmx10g -importGuess $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.sorted.vcf -export $cross/NAM_rils_SNPs.$cross.$chr.not-in-SVs.hmp.txt -exportType HapmapDiploid
-  done
+  qsub -v CROSS=$cross ~/projects/sv_nams/scripts/vcf2hmp_nam-rils_snps-not-in-svs.sh
 done
 ```
 
@@ -401,7 +400,9 @@ cd ~/projects/sv_nams/data/GBS-output/tmp/
 #   Rscript ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.R $cross $cross/NAM_rils_SNPs.$cross.not-in-SVs.not-imputed.hmp.txt $cross/NAM_gbs-parents_SNPs.$cross.not-in-SVs.reseq-overlay.hmp.txt ~/projects/sv_nams/analysis/qc/filter_best_SNPs --max_missing=0.3 --window_size=15 --window_step=1 --min_snps_per_window=5
 # done
 
-qsub ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.sh
+for cross in $(ls -d B73x*); do
+  qsub -v CROSS=$cross ~/projects/sv_nams/scripts/select_best_SNPs_per_pop.sh
+done
 
 # check how many SNPs remained
 wc -l B73x*/*.not-imputed.best-markers.hmp.txt
@@ -422,7 +423,7 @@ I wrote `scripts/summary_raw_gbs.R` to plot some basic statistics of the raw GBS
 
 | Average number SNPs | Average missing data | Average polymorphic |
 | ------------------- | -------------------- | ------------------- |
-| 2,730,043           | 85.48%               | 29.32%              |
+| 2,733,429           | 85.48%               | 29.32%              |
 
 ```bash
 cd ~/projects/sv_nams/
