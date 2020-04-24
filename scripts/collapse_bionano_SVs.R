@@ -144,7 +144,7 @@ while(svs.collapsed.in.iteration > 0) {
           # rewrite name of sv
           collapsed.sv.name <- paste0(type, ".chr", chr, ".", collapsed.sv.start, ".", collapsed.sv.end)
           # get middle position of sv
-          collapsed.middle.pos <- ceiling((collapsed.sv.start + collapsed.sv.start) / 2)
+          collapsed.middle.pos <- ceiling((collapsed.sv.start + collapsed.sv.end) / 2)
           # define hmp structure
           hmp.info.sv <- data.frame(collapsed.sv.name, "A/T", chr, collapsed.middle.pos,
                                     hmp.chr.type.overlap[1, 5:11])
