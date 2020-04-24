@@ -162,11 +162,12 @@ Importantly, any SV called as heterozygous in the VCF file (i.e. `0/1`) was cons
 
 
 
-### Merge SV calls from SNIFFLES and BioNano
+### Collapse overlapping SVs
 
 One problem with the BioNano SV calls is that the same SV can have slightly different, but overlapping, boundaries. The boundaries are fuzzy because of the methodology itself that cannot accurately tell what the start and end position of the SV are. Thus, we decided to collapse the information of SVs that have overlapping boundaries as they may actually represent the same SV. The approach for collapsing was: for each SV type that had overlapping boundaries, I selected the smallest start position and the greatest end position to be the coordinates for the collapsed SV. Then, I just merged their genotypic calls. I wrote `scripts/collapse_bionano_SVs.R` to do this.
 
 ```bash
+module load R
 # go to project folder
 cd ~/projects/sv_nams
 
@@ -174,18 +175,41 @@ cd ~/projects/sv_nams
 Rscript scripts/collapse_bionano_SVs.R data/NAM_founders_SVs.bionano.hmp.txt
 ```
 
-After that, I merged information from SNIFFLES and BioNano in a single file called `data/NAM_founders_SVs.hmp.txt`.
+SV calls by SNIFFLES also had similar problem. The difference is that same genotype can have different calls for the overlapping SV (which was not the case for bionano; i.e. all bionano overlapping SVs didn't have conflicts within a parent). Thus, in order to identify and remove these duplicated SVs in the SNIFFLES calls, I wrote `scripts/collapse_sniffles_SVs.R`. The conditions for collapsing or not overlapping SVs are as follows:
+
+* If calls for overlapping SVs **are the same** across all parents:
+  - Keep only the SV with less missing data;
+  - If they have the same amount of missing data; keep the largest SV.
+* If calls for overlapping SVs **are not the same** across all parents:
+  - Keep both SVs (i.e. don't collapse)
+
+```bash
+module load R
+# go to project folder
+cd ~/projects/sv_nams/
+
+Rscript scripts/collapse_sniffles_SVs.R data/NAM_founders_SVs.sniffles.hmp.txt
+```
+
+> Translocations were not considered in this filtering.
+
+
+
+
+### Merge SV calls from SNIFFLES and BioNano
+
+After collapsing SVs, I merged information from SNIFFLES and BioNano in a single file called `data/NAM_founders_SVs.hmp.txt`.
 
 ```bash
 # go to project folder
 cd ~/projects/sv_nams
 
 # make sure the order of NAMs in hapmaps are the same
-head -n 1 data/NAM_founders_SVs.sniffles.hmp.txt data/NAM_founders_SVs.bionano.collapsed.hmp.txt
+head -n 1 data/NAM_founders_SVs.sniffles.collapsed.hmp.txt data/NAM_founders_SVs.bionano.collapsed.hmp.txt
 # they are
 
 # merge files (use "sed 1d" to skip header of the bionano hapmap)
-cat data/NAM_founders_SVs.sniffles.hmp.txt > data/NAM_founders_SVs.not-sorted.hmp.txt
+cat data/NAM_founders_SVs.sniffles.collapsed.hmp.txt > data/NAM_founders_SVs.not-sorted.hmp.txt
 sed 1d data/NAM_founders_SVs.bionano.collapsed.hmp.txt >> data/NAM_founders_SVs.not-sorted.hmp.txt
 # sort hmp file
 run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin \
@@ -545,25 +569,15 @@ for cross in $(ls -d B73x*); do
 done
 ```
 
-After some preliminary tests, I found that using a haplotype block size of 2,000 sites (`-hapSize 2000`) gives the best projection rate without compromising accuracy too much. Also, since I'm creating haplotypes for each parent individually, I need to set the minimum number of taxa to create a haplotype to 1 (`-minTaxa 1`). Importantly, the option `-hybNN` should be turned to `false`, otherwise the algorithm will combine haplotypes in recombination breakpoints if it thinks that region is heterozygous. If this option is not turned off, some projected regions will be messy and can end up with more than two alleles. It it's off, nothing is projected for that region.
+After some preliminary tests, I found that using a haplotype block size of 3,000 sites (`-hapSize 3000`) gives the best projection rate without compromising accuracy too much. Also, since I'm creating haplotypes for each parent individually, I need to set the minimum number of taxa to create a haplotype to 1 (`-minTaxa 1`). Importantly, the option `-hybNN` should be turned to `false`, otherwise the algorithm will combine haplotypes in recombination breakpoints if it thinks that region is heterozygous. If this option is not turned off, some projected regions will be messy and can end up with more than two alleles. It it's off, nothing is projected for that region.
 
 ```bash
 # create new folder
 mkdir ~/projects/sv_nams/analysis/projection
 
-# create haplotypes from parents
+# project svs
 for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -FILLINFindHaplotypesPlugin  -hmp ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt  -o ~/projects/sv_nams/analysis/projection/donors_$cross -hapSize 2000 -minTaxa 1
-done
-
-# impute ril genotypes based on parental haplotypes
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -FILLINImputationPlugin -hmp ~/projects/sv_nams/data/NAM_rils_SVs-SNPs.$cross.best-markers.not-projected.sorted.hmp.txt -d ~/projects/sv_nams/analysis/projection/donors_$cross -o ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -hapSize 2000 -accuracy -hybNN false
-done
-
-# convert projected hapmap to diploid format
-for cross in $(ls -d B73x*); do
-  run_pipeline.pl -Xmx10g -importGuess ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -export ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt -exportType HapmapDiploid
+  qsub -v CROSS=$cross,HAPSIZE=3000 ~/projects/sv_nams/scripts/project_svs.sh
 done
 ```
 
@@ -573,7 +587,7 @@ After projection, I wrote `scripts/count_projected_SVs.R` to compute how many SV
 cd ~/projects/sv_nams/data/GBS-output/tmp/
 
 # calculate amount of projected SVs
-Rscript ~/projects/sv_nams/scripts/count_projected_SVs.R ~/projects/sv_nams/data ~/projects/sv_nams/analysis/projection
+qsub ~/projects/sv_nams/scripts/count_projected_svs.sh
 
 # plot karyotypes of SVs present in each parent of a cross
 for cross in $(ls -d B73x*); do
@@ -596,7 +610,7 @@ done
 # average missing data 0.09
 ```
 
-The average percentage of projected SVs across all populations was **87%** (~180k SVs) with average accuracy of **93%**. The amount projected was a bit higher (88%) if considering only polymorphic SVs between the two parents of a cross. Only five crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xOh7B, B73xP39, and B73xTzi8).
+The average percentage of projected SVs across all populations was **86%** (~143k SVs) with average accuracy of **93%**. The amount projected was a bit higher (87%) if considering only polymorphic SVs between the two parents of a cross. Only five crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xOh7B, B73xP39, and B73xTzi8).
 
 
 
@@ -607,14 +621,8 @@ The final file that will be sent to Jianming's group for GWAS will be a hapmap f
 ```bash
 cd ~/projects/sv_nams/analysis/projection
 
-# make sure files are sorted
-for file in NAM_rils_projected-SVs-only.B73x*; do
-  run_pipeline.pl -Xmx10g -SortGenotypeFilePlugin -inputFile $file -outputFile $file -fileType Hapmap
-  run_pipeline.pl -Xmx10g -importGuess $file -export $file -exportType HapmapDiploid
-done
-
 # merge hapmaps
-Rscript ~/projects/sv_nams/scripts/merge_SVs_after_projection.R
+qsub ~/projects/sv_nams/scripts/merge_SVs_after_projection.sh
 
 # make sure final file is sorted and let TASSEL correct the alleles' column
 run_pipeline.pl -Xmx10g \
@@ -628,6 +636,20 @@ run_pipeline.pl -Xmx10g \
                 -exportType HapmapDiploid
 ```
 
+After that, I performed a quick QC to check the total amount of missing data in the projected RILs.
+
+```bash
+cd ~/projects/sv_nams/analysis/projection
+
+# get summary
+run_pipeline.pl -Xmx40g -importGuess NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt \
+                -GenotypeSummaryPlugin -endPlugin \
+                -export tassel_summary_NAM_rils_projected_svs
+
+# plot missing data
+Rscript ~/projects/sv_nams/scripts/qc_tassel_summary.R tassel_summary_NAM_rils_projected_svs3.txt \
+                                                       missing_data_RILs_after_projection.png
+```
 
 
 ## Upload final hapmap to Cyverse
@@ -649,30 +671,6 @@ iput -K NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
 # exit iRods
 iexit full
 ```
-
-
-
-## Collapse duplicated SVs
-
-At this point, we realized that many SVs had overlaping boundaries, which may indicate that they represent actually the same SV. Thus, in order to identify and remove these duplicated SVs, I wrote `scripts/remove_duplicated_SVs.R`. The conditions for collapsing or not overlapping SVs are as follows:
-
-* If calls for overlapping SVs **are the same** across all parents:
-  - Keep only the SV with less missing data;
-  - If they have the same amount of missing data; keep the largest SV.
-* If calls for overlapping SVs **are not the same** across all parents:
-  - Keep both SVs (i.e. don't collapse)
-
-After filtering the parental dataset, the script will extract the names of remaining SVs and filter the RIl dataset. The output file is `analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.duplicated-SVs-removed.hmp.txt`
-
-```bash
-module load R
-cd ~/projects/sv_nams/
-
-Rscript scripts/remove_duplicated_SVs.R data/NAM_founders_SVs.hmp.txt analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
-```
-
-> Translocations were not considered in this filtering.
-
 
 
 
