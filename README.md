@@ -610,7 +610,7 @@ done
 # average missing data 0.09
 ```
 
-The average percentage of projected SVs across all populations was **86%** (~143k SVs) with average accuracy of **93%**. The amount projected was a bit higher (87%) if considering only polymorphic SVs between the two parents of a cross. Only five crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xOh7B, B73xP39, and B73xTzi8).
+The average percentage of projected SVs across all populations was **86%** (~135k SVs) with average accuracy of **93%**. The amount projected was a bit higher (87%) if considering only polymorphic SVs between the two parents of a cross. Only five crosses had projection rate below 75% (B73xCML322, B73xCML333, B73xOh7B, B73xP39, and B73xTzi8).
 
 
 
@@ -654,11 +654,14 @@ Rscript ~/projects/sv_nams/scripts/qc_tassel_summary.R tassel_summary_NAM_rils_p
 
 ## Upload final hapmap to Cyverse
 
-Lastly, I uploaded the final hapmap file `~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt` to the shared folder on Cyverse.
+Lastly, I uploaded the final hapmap file `~/projects/sv_nams/analysis/projection/NAM_rils_projected-SVs-only.all-RILs.final.v7.hmp.txt` to the shared folder on Cyverse.
 
 ```bash
 # go to data folder of the project
 cd ~/projects/sv_nams/analysis/projection
+
+# change name to avoid conflict with previous versions
+mv NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt NAM_rils_projected-SVs-only.all-RILs.final.v7.hmp.txt
 
 # log in to cyverse
 iinit
@@ -667,7 +670,7 @@ icd /iplant/home/shared/NAM/Misc
 # check if files match what Arun described
 ils
 # upload data
-iput -K NAM_rils_projected-SVs-only.all-RILs.final.hmp.txt
+iput -K NAM_rils_projected-SVs-only.all-RILs.final.v7.hmp.txt
 # exit iRods
 iexit full
 ```
@@ -762,7 +765,7 @@ for cross in $(ls -d B73x*); do
   Rscript ~/projects/sv_nams/scripts/keep_poly_reseq-snps_only.R $cross ~/projects/sv_nams/data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.not-in-SVs.hmp.txt
 done
 
-# merge svs
+# merge svs -- SHOULD I MERGE THIS?????? TALK TO CANDY!
 cd ~/projects/sv_nams/data/tmp/
 for cross in $(ls -d B73x*); do
   echo "Rscript ~/projects/sv_nams/scripts/merge_SNPs-reseq_and_SNPs-SVs.R ~/projects/sv_nams/data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.poly.not-in-SVs.hmp.txt ~/projects/sv_nams/data/NAM_parents_SVs-SNPs.$cross.sorted.hmp.txt ~/projects/sv_nams/analysis/projection/NAM_rils_SVs-SNPs.$cross.best-markers.projected.hmp.txt ~/projects/sv_nams/data/tmp/NAM_parents_SNPs-reseq_and_SVs-SNPs.$cross.poly.hmp.txt ~/projects/sv_nams/data/tmp/$cross/NAM_rils_SNPs-reseq_and_SVs-SNPs.$cross.poly.not-projected.hmp.txt"
