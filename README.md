@@ -6,6 +6,40 @@ by Rafael Della Coletta and Candice Hirsch (September, 2019 - April, 2020)
 
 
 
+<!-- TOC START min:1 max:3 link:true asterisk:false update:true -->
+- [Projecting SVs to NAM lines](#projecting-svs-to-nam-lines)
+  - [Project folder](#project-folder)
+  - [Transfering data from CyVerse to local folder](#transfering-data-from-cyverse-to-local-folder)
+  - [Requirements](#requirements)
+  - [Resequencing data](#resequencing-data)
+    - [Transform VCF into Hapmap format](#transform-vcf-into-hapmap-format)
+    - [Collapse overlapping SVs](#collapse-overlapping-svs)
+    - [Merge SV calls from SNIFFLES and BioNano](#merge-sv-calls-from-sniffles-and-bionano)
+    - [Identifying SNPs that are within the boundaries of a SV](#identifying-snps-that-are-within-the-boundaries-of-a-sv)
+  - [GBS data](#gbs-data)
+    - [Creating hapmap files for each NAM population and removing SNPs within SVs](#creating-hapmap-files-for-each-nam-population-and-removing-snps-within-svs)
+    - [Collapsing duplicated SNPs](#collapsing-duplicated-snps)
+    - [Overlaying resequencing data into parental GBS data](#overlaying-resequencing-data-into-parental-gbs-data)
+    - [Select best GBS markers](#select-best-gbs-markers)
+    - [Summary](#summary)
+  - [Merge SNPs with SVs](#merge-snps-with-svs)
+  - [Projection](#projection)
+  - [Merge all projected SVs of each population in one file](#merge-all-projected-svs-of-each-population-in-one-file)
+  - [Upload final hapmap to Cyverse](#upload-final-hapmap-to-cyverse)
+- [Projecting resequencing SNPs to NAM lines](#projecting-resequencing-snps-to-nam-lines)
+  - [Remove parental SNPs within SVs for each family](#remove-parental-snps-within-svs-for-each-family)
+  - [Prepare datasets for projection](#prepare-datasets-for-projection)
+  - [Projection](#projection-1)
+  - [Merge all projected SNPs of each family in one file](#merge-all-projected-snps-of-each-family-in-one-file)
+  - [Upload final hapmap to Cyverse](#upload-final-hapmap-to-cyverse-1)
+- [Creating SNP subsets for GWAS](#creating-snp-subsets-for-gwas)
+  - [LD calculation](#ld-calculation)
+  - [Subsets for GWAS](#subsets-for-gwas)
+- [Full SNP and SV dataset](#full-snp-and-sv-dataset)
+<!-- TOC END -->
+
+
+
 ## Project folder
 
 All data, scripts, and output of analyses are located on the folder `/home/hirschc1/della028/projects/sv_nams/` from my account at the Minnesota Supercomputing Institute (MSI).
