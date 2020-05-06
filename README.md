@@ -5,11 +5,6 @@ by Rafael Della Coletta and Candice Hirsch (September, 2019 - April, 2020)
 > The goal of this analysis is to project structural variants (SVs) indentified in the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines.
 
 
-<mark> TO DO:</mark>
-* Fix `help` functions of all scripts
-* Create a Table of Content for this README
-
-
 
 ## Project folder
 
