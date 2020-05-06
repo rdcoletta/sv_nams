@@ -1471,3 +1471,5 @@ done
 # exit iRods
 iexit full
 ```
+
+All files were moved to Cyverse folder: `/iplant/home/shared/NAM/Misc/NAM-SV-projected-V7`
