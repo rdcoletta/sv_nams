@@ -17,5 +17,5 @@ for cross in $(ls -d B73x*); do
   # ugly way to get the names of rils used to plot karyotype before imputation
   rils=$(ls ~/projects/sv_nams/analysis/qc/karyotypes/best-markers/*$cross* | xargs -n 1 basename | cut -d "_" -f 2 | cut -d "." -f 1 | paste -s -d ",")
   # plot karyotypes for those rils
-  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_reseq-SNPs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/reseq_snps_projection2 ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-reseq_and_best-SNPs.$cross.poly.projected.hmp.txt ~/projects/sv_nams/data/tmp/$cross/NAM_parents-reseq_SNPs.$cross.poly.not-in-SVs.hmp.txt --rils=$rils
+  Rscript ~/projects/sv_nams/scripts/plot_ril_karyotypes_reseq-SNPs.R ~/projects/sv_nams/analysis/qc/B73_RefGen_V4_chrm_info.txt ~/projects/sv_nams/analysis/qc/centromeres_Schneider-2016-pnas_v4.bed $cross ~/projects/sv_nams/analysis/qc/karyotypes/projection_snps ~/projects/sv_nams/analysis/reseq_snps_projection2/NAM_rils_SNPs-only.$cross.poly.projected.hmp.txt NAM_parents_SNPs-only.$cross.poly.sorted.hmp.txt --rils=$rils
 done
