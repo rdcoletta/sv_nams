@@ -4,7 +4,7 @@ by Rafael Della Coletta and Candice Hirsch (September, 2019 - September, 2020)
 
 > The goal of this analysis is to project structural variants (SVs) indentified in the NAM founders onto the RILs of each NAM population. To do this, we need both SNP and SV calls for the founders, and SNP data for all NAM lines. This project is part of the research published by [Hufford et al (2021, Science)](https://www.science.org/doi/10.1126/science.abg5289). For all codes associated with this research, please see [this Github repo](https://github.com/HuffordLab/NAM-genomes).
 
-> *Note*: the methods described here is a little different than the original research because I wanted to test a slightly different approach for projections. However, no difference was observed.
+> *Note*: the methods described here (v9) are a little different than the published research (v8) because I wanted to test a slightly different approach for projections. However, no difference was observed.
 
 
 
